@@ -1,17 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
 
-const extra = Constants.expoConfig?.extra || {};
-// Environment variables are preferred so development, preview, and production
-// builds can point to different Supabase projects without checking keys into app.json.
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? (extra.supabaseUrl as string);
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? (extra.supabaseAnonKey as string);
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabasePublishableKey =
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Missing Supabase environment variables - add to app.json under extra');
+if (!supabaseUrl || !supabasePublishableKey) {
+  throw new Error(
+    'Missing Supabase configuration. Copy .env.example to .env and add the project URL and publishable key.',
+  );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+if (
+  supabasePublishableKey.startsWith('sb_secret_') ||
+  process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
+) {
+  throw new Error('A Supabase secret or service-role key must never be bundled in the mobile app.');
+}
+
+export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,

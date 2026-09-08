@@ -6,12 +6,16 @@ The Expo mobile client for ICallOn. It can create and join the same Supabase-bac
 
 Run [`supabase_mobile_setup.sql`](./supabase_mobile_setup.sql) in the Supabase SQL editor once. It allows each authenticated person to create their own game profile and prevents duplicate players/answers during reconnects and retries.
 
-Add your public Supabase values to `.env`:
+Copy `.env.example` to `.env`, then add your public Supabase values:
 
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your-publishable-key
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your-key
 ```
+
+The publishable key is intentionally included in the client application. Never add a
+Supabase secret key, service-role key, or database connection URL to this repository.
+Row Level Security is the authorization boundary for mobile requests.
 
 Also add `icallon://auth/callback` as a redirect URL in Supabase Auth when using Google sign-in in a development or production build.
 
