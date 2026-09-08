@@ -4,7 +4,12 @@ The Expo mobile client for ICallOn. It can create and join the same Supabase-bac
 
 ## One-time Supabase setup
 
-Run [`supabase_mobile_setup.sql`](./supabase_mobile_setup.sql) in the Supabase SQL editor once. It allows each authenticated person to create their own game profile and prevents duplicate players/answers during reconnects and retries.
+Run these idempotent scripts in the Supabase SQL editor, in order:
+
+1. [`supabase_game_policies.sql`](./supabase_game_policies.sql) replaces the old public-write policies with player ownership and host-only scoring controls.
+2. [`supabase_mobile_setup.sql`](./supabase_mobile_setup.sql) prevents duplicate players/answers during reconnects and retries.
+
+Re-run both scripts after pulling database-policy changes. The publishable key is only safe when row-level security is enabled and these policies are active.
 
 Copy `.env.example` to `.env`, then add your public Supabase values:
 

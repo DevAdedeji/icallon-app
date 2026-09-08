@@ -1,6 +1,6 @@
 -- Run this in the Supabase SQL editor before releasing the mobile app.
--- It is safe to rerun. The app needs a public profile row because rooms.host_id
--- references public.users.
+-- Run supabase_game_policies.sql first. This script is safe to rerun. The app
+-- needs a public profile row because rooms.host_id references public.users.
 
 DO $$
 BEGIN
