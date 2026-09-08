@@ -1,0 +1,52 @@
+appId: com.anonymous.icallon
+name: Authentication smoke test
+---
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      visible: "Save Password?"
+    commands:
+      - tapOn: "Not Now"
+- runFlow:
+    when:
+      visible: "Create Account"
+    commands:
+      - tapOn:
+          id: "signup-login-link"
+- runFlow:
+    when:
+      visible: "MULTIPLAYER WORD BATTLE"
+    commands:
+      - tapOn: "Login"
+- assertVisible: "Sign in to your account to play"
+- assertVisible:
+    id: "login-email-input"
+- assertVisible:
+    id: "login-google-button"
+- tapOn:
+    id: "login-email-input"
+- eraseText
+- inputText: "not-an-email"
+- tapOn:
+    id: "login-password-input"
+- eraseText
+- inputText: "123"
+- tapOn: "Sign in to your account to play"
+- tapOn:
+    id: "login-submit-button"
+- assertVisible: "Please enter a valid email address"
+- assertVisible: "Password must be at least 6 characters"
+- tapOn:
+    id: "login-signup-link"
+- runFlow:
+    when:
+      visible: "Save Password?"
+    commands:
+      - tapOn: "Not Now"
+- assertVisible: "Create Account"
+- assertVisible:
+    id: "signup-username-input"
+- tapOn:
+    id: "signup-login-link"
+- assertVisible: "Sign in to your account to play"
