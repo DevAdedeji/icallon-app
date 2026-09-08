@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { supabase } from '@/lib/supabase/client';
 import { Fonts } from '@/constants/theme';
-import { createId, ensurePlayerProfile } from '@/lib/game';
+import { ensurePlayerProfile } from '@/features/auth/profile';
+import { createId } from '@/lib/game';
 
 export default function JoinRoomScreen() {
   const insets = useSafeAreaInsets();

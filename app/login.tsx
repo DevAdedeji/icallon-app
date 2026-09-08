@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
+import { ensurePlayerProfile } from '@/features/auth/profile';
 import { loginSchema, type LoginFormInputs } from '@/schemas/auth';
 import { supabase } from '@/lib/supabase/client';
 import { signInWithGoogle } from '@/lib/supabase/oauth';
 
 export default function LoginScreen() {
+  const { notice, returnTo } = useLocalSearchParams<{ notice?: string; returnTo?: string }>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -18,28 +20,31 @@ export default function LoginScreen() {
 
   const { control, handleSubmit, formState: { errors } } = useForm<LoginFormInputs>({
     resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' },
   });
+
+  const destination = returnTo === '/create-room' || returnTo === '/join-room'
+    ? returnTo
+    : '/game-lobby';
 
   const onSubmit = async (data: LoginFormInputs) => {
     setError(null);
     setLoading(true);
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
 
-      if (authError) {
-        setError(authError.message);
-        setLoading(false);
-        return;
-      }
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Login succeeded without a user session. Please try again.');
 
-      // Navigate to game lobby on success
-      router.replace('/game-lobby');
-    } catch {
-      setError('An unexpected error occurred');
+      await ensurePlayerProfile(authData.user);
+      router.replace(destination);
+    } catch (submitError: unknown) {
+      setError(submitError instanceof Error ? submitError.message : 'An unexpected error occurred');
+    } finally {
       setLoading(false);
     }
   };
@@ -49,7 +54,10 @@ export default function LoginScreen() {
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
-      router.replace('/game-lobby');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Google sign-in succeeded without a user session.');
+      await ensurePlayerProfile(user);
+      router.replace(destination);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Google sign-in failed');
     } finally {
@@ -68,7 +76,11 @@ export default function LoginScreen() {
           </View>
 
       <View style={styles.formContainer}>
-        {error && <View style={styles.errorBox}>
+        {notice && <View style={styles.noticeBox}>
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>}
+
+        {error && <View accessibilityRole="alert" style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
         </View>}
 
@@ -79,6 +91,7 @@ export default function LoginScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
+                testID="login-email-input"
                 style={[styles.input, errors.email && styles.inputError]}
                 placeholder="you@example.com"
                 placeholderTextColor="rgba(255, 255, 255, 0.3)"
@@ -87,6 +100,8 @@ export default function LoginScreen() {
                 editable={!loading}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
               />
               {errors.email && <Text style={styles.fieldError}>{errors.email.message}</Text>}
             </View>
@@ -101,6 +116,7 @@ export default function LoginScreen() {
               <Text style={styles.label}>Password</Text>
               <View style={{ position: 'relative' }}>
                 <TextInput
+                  testID="login-password-input"
                   style={[
                     styles.input,
                     errors.password && styles.inputError,
@@ -112,11 +128,14 @@ export default function LoginScreen() {
                   onChangeText={onChange}
                   editable={!loading}
                   secureTextEntry={!showPassword}
+                  autoComplete="current-password"
+                  textContentType="password"
                 />
                 <Pressable
                   onPress={() => setShowPassword((prev) => !prev)}
                   style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center', height: '100%' }}
                   accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityRole="button"
                 >
                   <AntDesign name={showPassword ? 'eye' : 'eye-invisible'} size={20} color="#fff" />
                 </Pressable>
@@ -127,9 +146,11 @@ export default function LoginScreen() {
         />
 
         <Pressable
+          testID="login-submit-button"
           style={[styles.loginButton, loading && styles.buttonDisabled]}
           onPress={handleSubmit(onSubmit)}
           disabled={loading}
+          accessibilityRole="button"
         >
           {loading ? (
             <ActivityIndicator color="#071108" />
@@ -144,9 +165,11 @@ export default function LoginScreen() {
         </View>
 
         <Pressable
+          testID="login-google-button"
           style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
           onPress={handleGoogleSignIn}
           disabled={loading || googleLoading}
+          accessibilityRole="button"
         >
           {googleLoading ? (
             <ActivityIndicator color="#F3FFF6" />
@@ -161,7 +184,7 @@ export default function LoginScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Don&apos;t have an account? </Text>
-        <Pressable onPress={() => router.push('/signup')} disabled={loading}>
+        <Pressable testID="login-signup-link" onPress={() => router.push('/signup')} disabled={loading}>
           <Text style={[styles.footerLink, loading && styles.disabledLink]}>Sign up</Text>
         </Pressable>
           </View>
@@ -225,6 +248,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(220, 38, 38, 0.5)',
     borderRadius: 12,
     padding: 12,
+  },
+  noticeBox: {
+    backgroundColor: 'rgba(124, 253, 77, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(124, 253, 77, 0.35)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  noticeText: {
+    color: '#CFE7D4',
+    fontSize: 14,
+    fontFamily: Fonts.sans,
+    fontWeight: '600',
   },
   errorText: {
     color: '#FCA5A5',

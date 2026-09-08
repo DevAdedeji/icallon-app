@@ -3,9 +3,11 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 
+import { parseOAuthCallbackUrl } from '@/features/auth/oauth-response';
+
 WebBrowser.maybeCompleteAuthSession();
 
-const getRedirectUrl = () => {
+export const getAuthRedirectUrl = (): string => {
   const appOwnership = Constants.appOwnership;
 
   // Expo Go cannot deep-link to custom schemes owned by your standalone app.
@@ -16,19 +18,32 @@ const getRedirectUrl = () => {
   return Linking.createURL('auth/callback', { scheme: 'icallon' });
 };
 
-const getParamFromUrl = (url: string, key: string) => {
-  const queryPart = url.includes('?') ? url.split('?')[1].split('#')[0] : '';
-  const hashPart = url.includes('#') ? url.split('#')[1] : '';
+export const completeOAuthCallback = async (url: string): Promise<void> => {
+  const response = parseOAuthCallbackUrl(url);
 
-  const queryValue = new URLSearchParams(queryPart).get(key);
-  if (queryValue) return queryValue;
+  if (response.type === 'tokens') {
+    const { error } = await supabase.auth.setSession({
+      access_token: response.accessToken,
+      refresh_token: response.refreshToken,
+    });
+    if (error) throw error;
+    return;
+  }
 
-  return new URLSearchParams(hashPart).get(key);
+  if (response.type === 'code') {
+    const { error } = await supabase.auth.exchangeCodeForSession(response.code);
+    if (error) throw error;
+    return;
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  if (!data.session) throw new Error('No authentication session was returned.');
 };
 
-export const signInWithGoogle = async () => {
+export const signInWithGoogle = async (): Promise<void> => {
   try {
-    const redirectUrl = getRedirectUrl();
+    const redirectUrl = getAuthRedirectUrl();
 
     if (Constants.appOwnership === 'expo') {
       throw new Error(
@@ -66,32 +81,8 @@ export const signInWithGoogle = async () => {
       );
     }
 
-    const accessToken = getParamFromUrl(result.url, 'access_token');
-    const refreshToken = getParamFromUrl(result.url, 'refresh_token');
-    const authCode = getParamFromUrl(result.url, 'code');
-
-    if (typeof accessToken === 'string' && typeof refreshToken === 'string') {
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-      if (sessionError) throw sessionError;
-      return;
-    }
-
-    if (typeof authCode === 'string') {
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(authCode);
-      if (exchangeError) throw exchangeError;
-      return;
-    }
-
-    // If no tokens were returned but session exists, OAuth succeeded.
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData.session) return;
-
-    throw new Error('No auth tokens returned from Google sign-in');
-  } catch (error) {
-    console.error('Google OAuth error:', error);
-    throw error;
+    await completeOAuthCallback(result.url);
+  } catch (error: unknown) {
+    throw error instanceof Error ? error : new Error('Google sign-in failed.');
   }
 };

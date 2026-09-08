@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/features/auth/auth-context';
 import { Fonts } from '@/constants/theme';
 
 export default function WelcomeScreen() {
   const fade = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(20)).current;
   const glow = useRef(new Animated.Value(0.4)).current;
-  const [signedIn, setSignedIn] = useState(false);
+  const { session } = useAuth();
 
   useEffect(() => {
     // Animation
@@ -39,17 +39,15 @@ export default function WelcomeScreen() {
       ),
     ]).start();
 
-    // Auth check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSignedIn(!!session);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSignedIn(!!session);
-    });
-    return () => {
-      listener?.subscription.unsubscribe();
-    };
   }, [fade, glow, rise]);
+
+  const openProtectedRoute = (path: '/create-room' | '/join-room') => {
+    if (session) {
+      router.push(path);
+    } else {
+      router.push({ pathname: '/login', params: { returnTo: path } });
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -75,19 +73,19 @@ export default function WelcomeScreen() {
         <View style={styles.buttonRow}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/create-room')}
+            onPress={() => openProtectedRoute('/create-room')}
             style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryPressed]}>
             <Text style={styles.primaryText}>Create Room</Text>
           </Pressable>
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/join-room')}
+            onPress={() => openProtectedRoute('/join-room')}
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryPressed]}>
             <Text style={styles.secondaryText}>Join Room</Text>
           </Pressable>
 
-          {!signedIn && (
+          {!session && (
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push('/login')}

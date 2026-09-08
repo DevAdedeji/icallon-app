@@ -6,9 +6,10 @@ import { router } from 'expo-router';
 import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
+import { ensurePlayerProfile } from '@/features/auth/profile';
 import { signUpSchema, type SignUpFormInputs } from '@/schemas/auth';
 import { supabase } from '@/lib/supabase/client';
-import { signInWithGoogle } from '@/lib/supabase/oauth';
+import { getAuthRedirectUrl, signInWithGoogle } from '@/lib/supabase/oauth';
 
 export default function SignupScreen() {
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +19,7 @@ export default function SignupScreen() {
 
   const { control, handleSubmit, formState: { errors } } = useForm<SignUpFormInputs>({
     resolver: zodResolver(signUpSchema),
+    defaultValues: { email: '', password: '', username: '' },
   });
 
   const onSubmit = async (data: SignUpFormInputs) => {
@@ -29,35 +31,28 @@ export default function SignupScreen() {
         email: data.email,
         password: data.password,
         options: {
+          emailRedirectTo: getAuthRedirectUrl(),
           data: {
             username: data.username,
           },
         },
       });
 
-      if (authError) {
-        setError(authError.message);
-        setLoading(false);
+      if (authError) throw authError;
+
+      if (signUpData.session && signUpData.user) {
+        await ensurePlayerProfile(signUpData.user);
+        router.replace('/game-lobby');
         return;
       }
 
-      if (signUpData.user) {
-        const { error: profileError } = await supabase.from('users').upsert({
-          id: signUpData.user.id,
-          email: data.email,
-          username: data.username,
-        }, { onConflict: 'id' });
-        if (profileError) {
-          setError('Account created, but your player profile could not be saved. Run supabase_mobile_setup.sql, then sign in again.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Navigate to login to confirm email
-      router.replace('/login');
-    } catch {
-      setError('An unexpected error occurred');
+      router.replace({
+        pathname: '/login',
+        params: { notice: 'Check your email to confirm your account, then log in.' },
+      });
+    } catch (submitError: unknown) {
+      setError(submitError instanceof Error ? submitError.message : 'An unexpected error occurred');
+    } finally {
       setLoading(false);
     }
   };
@@ -67,6 +62,9 @@ export default function SignupScreen() {
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Google sign-in succeeded without a user session.');
+      await ensurePlayerProfile(user);
       router.replace('/game-lobby');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Google sign-up failed');
@@ -86,7 +84,7 @@ export default function SignupScreen() {
           </View>
 
       <View style={styles.formContainer}>
-        {error && <View style={styles.errorBox}>
+        {error && <View accessibilityRole="alert" style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
         </View>}
 
@@ -97,6 +95,7 @@ export default function SignupScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
+                testID="signup-email-input"
                 style={[styles.input, errors.email && styles.inputError]}
                 placeholder="you@example.com"
                 placeholderTextColor="rgba(255, 255, 255, 0.3)"
@@ -105,6 +104,8 @@ export default function SignupScreen() {
                 editable={!loading}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
               />
               {errors.email && <Text style={styles.fieldError}>{errors.email.message}</Text>}
             </View>
@@ -118,6 +119,7 @@ export default function SignupScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Username</Text>
               <TextInput
+                testID="signup-username-input"
                 style={[styles.input, errors.username && styles.inputError]}
                 placeholder="Your username"
                 placeholderTextColor="rgba(255, 255, 255, 0.3)"
@@ -125,6 +127,8 @@ export default function SignupScreen() {
                 onChangeText={onChange}
                 editable={!loading}
                 autoCapitalize="none"
+                autoComplete="username-new"
+                textContentType="username"
               />
               {errors.username && <Text style={styles.fieldError}>{errors.username.message}</Text>}
             </View>
@@ -139,6 +143,7 @@ export default function SignupScreen() {
               <Text style={styles.label}>Password</Text>
               <View style={{ position: 'relative' }}>
                 <TextInput
+                  testID="signup-password-input"
                   style={[
                     styles.input,
                     errors.password && styles.inputError,
@@ -150,11 +155,14 @@ export default function SignupScreen() {
                   onChangeText={onChange}
                   editable={!loading}
                   secureTextEntry={!showPassword}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
                 />
                 <Pressable
                   onPress={() => setShowPassword((prev) => !prev)}
                   style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center', height: '100%' }}
                   accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityRole="button"
                 >
                   <AntDesign name={showPassword ? 'eye' : 'eye-invisible'} size={20} color="#fff" />
                 </Pressable>
@@ -165,9 +173,11 @@ export default function SignupScreen() {
         />
 
         <Pressable
+          testID="signup-submit-button"
           style={[styles.signupButton, loading && styles.buttonDisabled]}
           onPress={handleSubmit(onSubmit)}
           disabled={loading}
+          accessibilityRole="button"
         >
           {loading ? (
             <ActivityIndicator color="#071108" />
@@ -185,6 +195,7 @@ export default function SignupScreen() {
           style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
           onPress={handleGoogleSignUp}
           disabled={loading || googleLoading}
+          accessibilityRole="button"
         >
           {googleLoading ? (
             <ActivityIndicator color="#F3FFF6" />
@@ -199,7 +210,7 @@ export default function SignupScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Already have an account? </Text>
-        <Pressable onPress={() => router.push('/login')} disabled={loading}>
+        <Pressable testID="signup-login-link" onPress={() => router.push('/login')} disabled={loading}>
           <Text style={[styles.footerLink, loading && styles.disabledLink]}>Login</Text>
         </Pressable>
           </View>

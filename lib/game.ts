@@ -51,17 +51,6 @@ export function createId() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export async function ensurePlayerProfile(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
-  const usernameFromMetadata = typeof user.user_metadata?.username === 'string' ? user.user_metadata.username : undefined;
-  const username = usernameFromMetadata || user.email?.split('@')[0] || `player-${user.id.slice(0, 6)}`;
-  const { error } = await supabase.from('users').upsert({
-    id: user.id,
-    email: user.email ?? `${user.id}@player.icallon`,
-    username,
-  }, { onConflict: 'id', ignoreDuplicates: true });
-  if (error) throw error;
-}
-
 export function answerPoints(answer: Pick<GameAnswer, 'name_valid' | 'animal_valid' | 'place_valid' | 'thing_valid'>) {
   return CATEGORIES.reduce((total, category) => total + (answer[`${category}_valid` as keyof typeof answer] ? 10 : 0), 0);
 }
