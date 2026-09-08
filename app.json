@@ -7,9 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "icallon",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.icallon"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,8 +18,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.anonymous.icallon"
     },
     "web": {
       "output": "static",
@@ -41,8 +40,12 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
+    },
+    "extra": {
+      "supabaseUrl": "https://inhydinfdayfxogoykca.supabase.co",
+      "supabaseAnonKey": "sb_publishable_2FiQk59PJXTZxnbBOt3gZA_UljrDncN"
     }
   }
 }
