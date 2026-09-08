@@ -37,15 +37,12 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": false,
       "reactCompiler": true
-    },
-    "extra": {
-      "supabaseUrl": "https://inhydinfdayfxogoykca.supabase.co",
-      "supabaseAnonKey": "sb_publishable_2FiQk59PJXTZxnbBOt3gZA_UljrDncN"
     }
   }
 }
