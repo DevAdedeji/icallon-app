@@ -11,7 +11,7 @@ export function applyAnswerScore(
 
 export function databaseTimestampMs(timestamp: string): number {
   const match = timestamp.match(
-    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):?(\d{2}))$/,
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):?(\d{2}))?$/,
   );
 
   if (!match) return Date.parse(timestamp);
@@ -27,7 +27,9 @@ export function databaseTimestampMs(timestamp: string): number {
     Number(second),
     milliseconds,
   );
-  if (zone === 'Z') return localTime;
+  // The existing schema stores timestamps without a zone, but PostgreSQL's
+  // now() value is UTC in this project. Treat zone-less API values as UTC.
+  if (!zone || zone === 'Z') return localTime;
 
   const offset = (Number(offsetHour) * 60 + Number(offsetMinute)) * 60_000;
   return sign === '+' ? localTime - offset : localTime + offset;

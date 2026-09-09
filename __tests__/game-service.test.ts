@@ -23,6 +23,7 @@ describe('game state helpers', () => {
   });
 
   it('parses PostgreSQL microsecond timestamps consistently across JavaScript runtimes', () => {
+    expect(databaseTimestampMs('2026-09-09T04:47:59.007323')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
     expect(databaseTimestampMs('2026-09-09T04:47:59.007323+00:00')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
     expect(databaseTimestampMs('2026-09-09 06:47:59.007323+02:00')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
     expect(databaseTimestampMs('2026-09-08T23:47:59.007323-05:00')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
