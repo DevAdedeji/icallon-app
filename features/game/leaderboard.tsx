@@ -18,11 +18,14 @@ const CONFETTI = Array.from({ length: 28 }, (_, index) => ({
 }));
 
 type LeaderboardProps = {
+  isHost: boolean;
+  isRematching: boolean;
+  onRematch: () => void;
   roomId: string;
   onExit: () => void;
 };
 
-export function Leaderboard({ roomId, onExit }: LeaderboardProps) {
+export function Leaderboard({ isHost, isRematching, onRematch, roomId, onExit }: LeaderboardProps) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -93,6 +96,21 @@ export function Leaderboard({ roomId, onExit }: LeaderboardProps) {
           </>
         )}
 
+        {isHost ? (
+          <Pressable
+            accessibilityRole="button"
+            testID="leaderboard-rematch"
+            disabled={isRematching}
+            style={[styles.rematchButton, isRematching && styles.disabled]}
+            onPress={onRematch}
+          >
+            {isRematching
+              ? <ActivityIndicator color="#071108" />
+              : <Text style={styles.rematchButtonText}>Play again with this group</Text>}
+          </Pressable>
+        ) : (
+          <Text style={styles.rematchWaiting}>The host can start a rematch with this group.</Text>
+        )}
         <Pressable accessibilityRole="button" testID="leaderboard-exit" style={styles.button} onPress={onExit}>
           <Text style={styles.buttonText}>Back to home</Text>
         </Pressable>
@@ -289,12 +307,37 @@ const styles = StyleSheet.create({
   },
   button: {
     minHeight: 54,
+    marginTop: 10,
     borderRadius: 14,
     backgroundColor: '#7CFD4D',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
   },
+  rematchButton: {
+    minHeight: 54,
+    borderRadius: 14,
+    backgroundColor: '#7CFD4D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 22,
+    paddingHorizontal: 16,
+  },
+  rematchButtonText: {
+    color: '#071108',
+    fontFamily: Fonts.sans,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  rematchWaiting: {
+    color: '#9CB7A1',
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 22,
+    textAlign: 'center',
+  },
+  disabled: { opacity: 0.55 },
   buttonText: {
     color: '#071108',
     fontFamily: Fonts.sans,

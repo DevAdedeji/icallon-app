@@ -173,4 +173,21 @@ run_flow "${guest_device}" e2e/multiplayer/guest-results.yaml \
 
 xcrun simctl io "${host_device}" screenshot "${artifact_root}/host-leaderboard.png"
 xcrun simctl io "${guest_device}" screenshot "${artifact_root}/guest-leaderboard.png"
-echo "Three-round, two-device multiplayer flow passed."
+
+run_flow "${guest_device}" e2e/multiplayer/guest-rematch.yaml \
+  -e "ROOM_CODE=${room_code}" -e "HOST_USERNAME=${E2E_HOST_USERNAME}" \
+  -e "GUEST_USERNAME=${E2E_GUEST_USERNAME}" &
+guest_rematch_pid=$!
+
+run_flow "${host_device}" e2e/multiplayer/host-rematch.yaml \
+  -e "ROOM_CODE=${room_code}" -e "HOST_USERNAME=${E2E_HOST_USERNAME}" \
+  -e "GUEST_USERNAME=${E2E_GUEST_USERNAME}"
+
+if ! wait "${guest_rematch_pid}"; then
+  echo "The guest did not follow the room into the rematch lobby." >&2
+  exit 1
+fi
+
+xcrun simctl io "${host_device}" screenshot "${artifact_root}/host-rematch-lobby.png"
+xcrun simctl io "${guest_device}" screenshot "${artifact_root}/guest-rematch-lobby.png"
+echo "Three-round, two-device multiplayer and instant rematch flow passed."

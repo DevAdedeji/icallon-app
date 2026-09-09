@@ -9,6 +9,7 @@ export type Room = {
   time_per_round: number;
   current_round: number;
   current_round_id: string | null;
+  game_number: number;
   started_at: string | null;
 };
 

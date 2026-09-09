@@ -155,6 +155,34 @@ BEGIN
   IF (SELECT count(*) FROM public.get_my_match_history(20)) <> 1 THEN
     RAISE EXCEPTION 'Match history did not return the completed game';
   END IF;
+
+  BEGIN
+    PERFORM * FROM public.request_game_rematch(created_room_id);
+    RAISE EXCEPTION 'A non-host unexpectedly requested a rematch';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  PERFORM * FROM public.request_game_rematch(created_room_id);
+  -- Retrying the same request must not skip a game number.
+  PERFORM * FROM public.request_game_rematch(created_room_id);
+
+  IF (SELECT status FROM public.rooms WHERE id = created_room_id) <> 'lobby'
+    OR (SELECT game_number FROM public.rooms WHERE id = created_room_id) <> 2 THEN
+    RAISE EXCEPTION 'Rematch did not reset the room exactly once';
+  END IF;
+  IF (SELECT count(*) FROM public.players WHERE room_id = created_room_id) <> 2
+    OR (SELECT sum(total_score) FROM public.players WHERE room_id = created_room_id) <> 0 THEN
+    RAISE EXCEPTION 'Rematch did not preserve players and reset scores';
+  END IF;
+  IF (SELECT count(*) FROM public.rounds WHERE room_id = created_room_id) <> 0
+    OR (SELECT count(*) FROM public.answers WHERE room_id = created_room_id) <> 0 THEN
+    RAISE EXCEPTION 'Rematch did not clear old live gameplay data';
+  END IF;
+  IF (SELECT count(*) FROM public.game_results WHERE room_id = created_room_id) <> 1 THEN
+    RAISE EXCEPTION 'Rematch removed completed game history';
+  END IF;
 END;
 $$;
 

@@ -710,6 +710,78 @@ $$;
 REVOKE ALL ON FUNCTION public.end_game(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.end_game(text) TO authenticated;
 
+-- Keep the group together while resetting only the live state. Completed
+-- scores remain available in the immutable history snapshot created above.
+CREATE OR REPLACE FUNCTION public.request_game_rematch(requested_room_id text)
+RETURNS TABLE (room_id text, room_status text, game_number integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  room_record public.rooms%ROWTYPE;
+  next_game_number integer;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT room.* INTO room_record
+  FROM public.rooms AS room
+  WHERE room.id = requested_room_id
+  FOR UPDATE;
+
+  IF room_record.id IS NULL OR room_record.host_id <> caller_id::text THEN
+    RAISE EXCEPTION 'Only the host can request a rematch' USING ERRCODE = '42501';
+  END IF;
+
+  -- A repeated request after the reset returns the same state instead of
+  -- incrementing the game number again.
+  IF room_record.status = 'lobby' AND room_record.current_round = 0
+    AND room_record.started_at IS NULL THEN
+    RETURN QUERY SELECT room_record.id, 'lobby'::text, room_record.game_number;
+    RETURN;
+  END IF;
+
+  IF room_record.status <> 'ended' THEN
+    RAISE EXCEPTION 'Finish the game before requesting a rematch' USING ERRCODE = '55000';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.game_results AS result
+    WHERE result.room_id = room_record.id
+      AND result.game_number = room_record.game_number
+  ) THEN
+    RAISE EXCEPTION 'The completed game result is not ready' USING ERRCODE = '55000';
+  END IF;
+
+  next_game_number := room_record.game_number + 1;
+
+  UPDATE public.rooms AS room
+  SET
+    status = 'lobby',
+    game_number = next_game_number,
+    current_round = 0,
+    current_round_id = NULL,
+    started_at = NULL,
+    ended_at = NULL
+  WHERE room.id = requested_room_id;
+
+  DELETE FROM public.rounds AS game_round
+  WHERE game_round.room_id = requested_room_id;
+
+  UPDATE public.players AS player
+  SET total_score = 0, is_connected = true
+  WHERE player.room_id = requested_room_id;
+
+  RETURN QUERY SELECT requested_room_id, 'lobby'::text, next_game_number;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.request_game_rematch(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.request_game_rematch(text) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_my_game_stats()
 RETURNS TABLE (
   games_played bigint,
