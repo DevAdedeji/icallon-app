@@ -11,6 +11,8 @@ Run these idempotent scripts in the Supabase SQL editor, in order:
 
 Re-run both scripts after pulling database-policy changes. The publishable key is only safe when row-level security is enabled and these policies are active.
 
+The setup script also installs the authenticated database functions used for room creation, joining, gameplay transitions, answer submission, scoring, and ending a game. These operations validate the caller and run atomically in PostgreSQL; the mobile client does not decide host authority or calculate trusted scores.
+
 Copy `.env.example` to `.env`, then add your public Supabase values:
 
 ```env
@@ -49,6 +51,24 @@ The application routes are:
 - Live lobby and invite sharing
 - Host letter selection, timed answers, autosave and submission
 - Host answer review/validation, scoring, next round and leaderboard
+
+## Verification
+
+Run the local checks before pushing a mobile change:
+
+```bash
+npm run verify
+npm run test:database
+npx expo-doctor
+```
+
+`npm run test:database` starts a disposable local PostgreSQL 17+ instance, applies the policy and mobile setup scripts, exercises a two-player game, verifies authorization and scoring invariants, reapplies the migration to prove it is idempotent, and then removes the temporary database.
+
+With an iOS Simulator booted and the development build installed, run the simulator smoke suite with:
+
+```bash
+npm run e2e:ios
+```
 
 Expo can open the app in a
 

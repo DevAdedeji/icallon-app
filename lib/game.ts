@@ -47,14 +47,6 @@ export type GameAnswer = AnswerValues & {
 export const EMPTY_ANSWERS: AnswerValues = { name: '', animal: '', place: '', thing: '' };
 export const CATEGORIES: Array<keyof AnswerValues> = ['name', 'animal', 'place', 'thing'];
 
-export function createId() {
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
-}
-
-export function answerPoints(answer: Pick<GameAnswer, 'name_valid' | 'animal_valid' | 'place_valid' | 'thing_valid'>) {
-  return CATEGORIES.reduce((total, category) => total + (answer[`${category}_valid` as keyof typeof answer] ? 10 : 0), 0);
-}
-
 export async function getPlayer(roomId: string, userId: string) {
   const { data, error } = await supabase
     .from('players')
@@ -64,41 +56,4 @@ export async function getPlayer(roomId: string, userId: string) {
     .maybeSingle();
   if (error) throw error;
   return data as Player | null;
-}
-
-export async function saveAnswers({
-  roomId,
-  roundId,
-  player,
-  values,
-  submitted = false,
-}: {
-  roomId: string;
-  roundId: string;
-  player: Player;
-  values: AnswerValues;
-  submitted?: boolean;
-}) {
-  const { data: existing, error: findError } = await supabase
-    .from('answers')
-    .select('id')
-    .eq('room_id', roomId)
-    .eq('round_id', roundId)
-    .eq('player_id', player.id)
-    .maybeSingle();
-  if (findError) throw findError;
-
-  const payload = {
-    ...values,
-    updated_at: new Date().toISOString(),
-    ...(submitted ? { submitted_at: new Date().toISOString() } : {}),
-  };
-  const request = existing
-    ? supabase.from('answers').update(payload).eq('id', existing.id)
-    : supabase.from('answers').insert({
-        id: createId(), room_id: roomId, round_id: roundId, player_id: player.id,
-        player_name: player.display_name, ...payload,
-      });
-  const { error } = await request;
-  if (error) throw error;
 }
