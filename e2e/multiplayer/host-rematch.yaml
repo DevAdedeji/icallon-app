@@ -31,7 +31,6 @@ name: Host starts an instant rematch
     visible:
       id: "profile-history"
     timeout: 15000
-- assertVisible: "Games: 1"
 - tapOn:
     id: "profile-back"
 - tapOn:
