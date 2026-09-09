@@ -30,6 +30,7 @@ export default function LobbyScreen() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [roomCode, setRoomCode] = useState('');
   const [packName, setPackName] = useState('Classic');
+  const [isPublic, setIsPublic] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -52,7 +53,7 @@ export default function LobbyScreen() {
     if (!roomId || !session?.user.id) return;
     const { data, error: roomError } = await supabase
       .from('rooms')
-      .select('id, code, host_id, status, category_pack')
+      .select('id, code, host_id, status, category_pack, is_public')
       .eq('id', roomId)
       .maybeSingle();
     if (roomError) throw roomError;
@@ -60,6 +61,7 @@ export default function LobbyScreen() {
 
     setRoomCode(data.code);
     setPackName(categoryPackName(data.category_pack));
+    setIsPublic(Boolean(data.is_public));
     setIsHost(data.host_id === session.user.id);
     if (data.status === 'playing') {
       router.replace({ pathname: '/game', params: { roomId: data.id } });
@@ -153,6 +155,7 @@ export default function LobbyScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.kicker}>GAME LOBBY</Text>
+            {isPublic && <Text testID="public-room-badge" style={styles.publicBadge}>PUBLIC QUICK MATCH</Text>}
             <Text style={connectionStatus === 'connected' ? styles.connectedText : styles.offlineText}>
               {connectionStatus === 'connected' ? 'LIVE' : connectionStatus === 'connecting' ? 'CONNECTING…' : 'RECONNECTING…'}
             </Text>
@@ -207,9 +210,9 @@ export default function LobbyScreen() {
             <Pressable
               accessibilityRole="button"
               testID="start-game-button"
-              style={[styles.startButton, (starting || players.length < 1) && styles.buttonDisabled]}
+              style={[styles.startButton, (starting || players.length < (isPublic ? 2 : 1)) && styles.buttonDisabled]}
               onPress={handleStartGame}
-              disabled={starting || players.length < 1}
+              disabled={starting || players.length < (isPublic ? 2 : 1)}
             >
               {starting
                 ? <ActivityIndicator color="#071108" />
@@ -227,6 +230,7 @@ export default function LobbyScreen() {
               <Text style={styles.waitingText}>Waiting for host to start…</Text>
             </View>
           )}
+          {isHost && isPublic && players.length < 2 && <Text style={styles.publicHint}>Waiting for at least one opponent…</Text>}
         </View>
       </ScrollView>
     </View>
@@ -246,6 +250,7 @@ const styles = StyleSheet.create({
   packText: { color: '#9CB7A1', fontSize: 12, fontFamily: Fonts.sans, marginTop: -8, marginBottom: 12 },
   connectedText: { color: '#7CFD4D', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.4, marginBottom: 8 },
   offlineText: { color: '#F8D77A', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.1, marginBottom: 8 },
+  publicBadge: { color: '#70C8FF', fontFamily: Fonts.mono, fontSize: 9, letterSpacing: 1.3, marginBottom: 7 },
   shareStatus: { color: '#9CB7A1', fontSize: 11, lineHeight: 16, fontFamily: Fonts.sans, textAlign: 'center', marginTop: 8, maxWidth: 280 },
   errorBox: { backgroundColor: 'rgba(220,38,38,0.14)', borderColor: 'rgba(220,38,38,0.5)', borderRadius: 12, borderWidth: 1, marginBottom: 20, padding: 12 },
   errorText: { color: '#FCA5A5', fontFamily: Fonts.sans, fontSize: 14 },
@@ -320,4 +325,5 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   waitingText: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontFamily: Fonts.sans },
+  publicHint: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 12, textAlign: 'center', marginTop: 10 },
 });

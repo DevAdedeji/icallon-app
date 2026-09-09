@@ -86,6 +86,11 @@ export default function GameLobbyScreen() {
         <View style={styles.soloCopy}><Text style={styles.soloTitle}>Daily challenge</Text><Text style={styles.soloSubtitle}>One shared puzzle every day</Text></View>
         <AntDesign name="right" color="#F8D77A" size={14} />
       </Pressable>
+      <Pressable accessibilityRole="button" testID="home-quick-match" style={styles.quickMatchButton} onPress={() => router.push('/matchmaking')}>
+        <AntDesign name="global" color="#70C8FF" size={18} />
+        <View style={styles.soloCopy}><Text style={styles.soloTitle}>Quick Match</Text><Text style={styles.soloSubtitle}>Play with people online</Text></View>
+        <AntDesign name="right" color="#70C8FF" size={14} />
+      </Pressable>
       <Pressable accessibilityRole="button" testID="home-create-room" style={styles.primaryButton} onPress={() => router.push('/create-room')}>
         <Text style={styles.primaryText}>Create Room</Text>
       </Pressable>
@@ -134,6 +139,7 @@ const styles = StyleSheet.create({
   soloTitle: { color: '#F3FFF6', fontSize: 16, fontWeight: '900', fontFamily: Fonts.sans },
   soloSubtitle: { color: '#9CB7A1', fontSize: 12, fontFamily: Fonts.sans, marginTop: 2 },
   dailyButton: { minHeight: 62, paddingHorizontal: 15, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(248,215,122,0.3)', backgroundColor: 'rgba(248,215,122,0.07)', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  quickMatchButton: { minHeight: 62, paddingHorizontal: 15, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(112,200,255,0.3)', backgroundColor: 'rgba(112,200,255,0.07)', flexDirection: 'row', alignItems: 'center', gap: 12 },
   button: {
     marginTop: 10,
     height: 50,
