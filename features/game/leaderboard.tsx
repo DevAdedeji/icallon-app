@@ -72,20 +72,23 @@ export function Leaderboard({ roomId, onExit }: LeaderboardProps) {
             )}
 
             <View style={styles.list}>
-              {players.map((player, index) => (
-                <View
-                  accessibilityLabel={`${player.display_name}, position ${index + 1}, ${player.total_score} points`}
-                  key={player.id}
-                  style={[styles.row, index === 0 && styles.winnerRow]}
-                >
-                  <Text style={styles.position}>{MEDALS[index] ?? index + 1}</Text>
-                  <Text numberOfLines={1} style={styles.playerName}>{player.display_name}</Text>
-                  <View style={styles.scoreWrap}>
-                    <Text style={styles.score}>{player.total_score}</Text>
-                    <Text style={styles.rowPointsLabel}>PTS</Text>
+              {players.slice(1).map((player, index) => {
+                const position = index + 2;
+                return (
+                  <View
+                    accessibilityLabel={`${player.display_name}, position ${position}, ${player.total_score} points`}
+                    key={player.id}
+                    style={styles.row}
+                  >
+                    <Text style={styles.position}>{MEDALS[position - 1] ?? position}</Text>
+                    <Text numberOfLines={1} style={styles.playerName}>{player.display_name}</Text>
+                    <View style={styles.scoreWrap}>
+                      <Text style={styles.score}>{player.total_score}</Text>
+                      <Text style={styles.rowPointsLabel}>PTS</Text>
+                    </View>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           </>
         )}
@@ -253,10 +256,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.09)',
-  },
-  winnerRow: {
-    backgroundColor: 'rgba(255,209,102,0.08)',
-    borderColor: 'rgba(255,209,102,0.24)',
   },
   position: {
     width: 42,
