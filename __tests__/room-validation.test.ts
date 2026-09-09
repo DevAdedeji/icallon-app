@@ -12,8 +12,10 @@ describe('room input validation', () => {
   });
 
   it('accepts only the game settings supported by the UI and database', () => {
-    expect(roomSettingsSchema.safeParse({ maxRounds: 5, timePerRound: 60 }).success).toBe(true);
-    expect(roomSettingsSchema.safeParse({ maxRounds: 4, timePerRound: 45 }).success).toBe(false);
+    const classic = { maxRounds: 5, timePerRound: 60, categoryPack: 'classic', categoryLabels: ['Name', 'Animal', 'Place', 'Thing'] };
+    expect(roomSettingsSchema.safeParse(classic).success).toBe(true);
+    expect(roomSettingsSchema.safeParse({ ...classic, maxRounds: 4, timePerRound: 45 }).success).toBe(false);
+    expect(roomSettingsSchema.safeParse({ ...classic, categoryPack: 'custom', categoryLabels: ['Name', 'Name', 'Place', 'Thing'] }).success).toBe(false);
   });
 
   it('normalizes a room code from deep-link parameters', () => {
