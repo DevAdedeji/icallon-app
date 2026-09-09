@@ -57,6 +57,7 @@ function RootNavigator() {
           <Stack.Screen name="lobby" />
           <Stack.Screen name="game" />
           <Stack.Screen name="solo" />
+          <Stack.Screen name="daily" />
         </Stack.Protected>
       </Stack>
       <StatusBar style="light" />

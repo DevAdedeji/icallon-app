@@ -81,6 +81,11 @@ export default function GameLobbyScreen() {
         </View>
         <AntDesign name="right" color="#7CFD4D" size={14} />
       </Pressable>
+      <Pressable accessibilityRole="button" testID="home-daily" style={styles.dailyButton} onPress={() => router.push('/daily')}>
+        <AntDesign name="calendar" color="#F8D77A" size={18} />
+        <View style={styles.soloCopy}><Text style={styles.soloTitle}>Daily challenge</Text><Text style={styles.soloSubtitle}>One shared puzzle every day</Text></View>
+        <AntDesign name="right" color="#F8D77A" size={14} />
+      </Pressable>
       <Pressable accessibilityRole="button" testID="home-create-room" style={styles.primaryButton} onPress={() => router.push('/create-room')}>
         <Text style={styles.primaryText}>Create Room</Text>
       </Pressable>
@@ -128,6 +133,7 @@ const styles = StyleSheet.create({
   soloCopy: { flex: 1 },
   soloTitle: { color: '#F3FFF6', fontSize: 16, fontWeight: '900', fontFamily: Fonts.sans },
   soloSubtitle: { color: '#9CB7A1', fontSize: 12, fontFamily: Fonts.sans, marginTop: 2 },
+  dailyButton: { minHeight: 62, paddingHorizontal: 15, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(248,215,122,0.3)', backgroundColor: 'rgba(248,215,122,0.07)', flexDirection: 'row', alignItems: 'center', gap: 12 },
   button: {
     marginTop: 10,
     height: 50,

@@ -1,5 +1,5 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,11 +25,14 @@ function resultId(): string {
 
 export default function SoloScreen() {
   const insets = useSafeAreaInsets();
-  const seed = useRef(resultId()).current;
+  const params = useLocalSearchParams<{ mode?: string; pack?: string; date?: string; seed?: string }>();
+  const isDaily = params.mode === 'daily';
+  const dailyPack = CATEGORY_PACKS.some((item) => item.id === params.pack) ? params.pack as SoloPack : 'classic';
+  const seed = useRef(isDaily && params.seed ? params.seed : resultId()).current;
   const persistenceId = useRef(resultId()).current;
-  const [phase, setPhase] = useState<Phase>('setup');
-  const [pack, setPack] = useState<SoloPack>('classic');
-  const [difficulty, setDifficulty] = useState<SoloDifficulty>('medium');
+  const [phase, setPhase] = useState<Phase>(isDaily ? 'answering' : 'setup');
+  const [pack, setPack] = useState<SoloPack>(isDaily ? dailyPack : 'classic');
+  const [difficulty, setDifficulty] = useState<SoloDifficulty>(isDaily ? 'hard' : 'medium');
   const [roundIndex, setRoundIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerValues>(EMPTY_ANSWERS);
   const [opponent, setOpponent] = useState<AnswerValues>(EMPTY_ANSWERS);
@@ -71,6 +74,8 @@ export default function SoloScreen() {
         categoryPack: pack,
         playerScore: finalPlayerScore,
         opponentScore: finalOpponentScore,
+        mode: isDaily ? 'daily' : 'solo',
+        challengeDate: isDaily ? params.date : null,
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Your result could not be saved.');
@@ -101,7 +106,7 @@ export default function SoloScreen() {
         {phase !== 'setup' && phase !== 'result' && <Text style={styles.roundIndicator}>ROUND {roundIndex + 1}/{letters.length}</Text>}
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        {phase === 'setup' && (
+        {phase === 'setup' && !isDaily && (
           <>
             <Text style={styles.kicker}>SOLO MODE</Text>
             <Text style={styles.title}>Beat the computer</Text>
@@ -120,7 +125,7 @@ export default function SoloScreen() {
 
         {phase === 'answering' && (
           <>
-            <Text style={styles.kicker}>YOUR LETTER</Text>
+            <Text style={styles.kicker}>{isDaily ? 'DAILY CHALLENGE' : 'YOUR LETTER'}</Text>
             <Text testID="solo-letter" style={styles.letter}>{letter}</Text>
             <Text style={styles.subtitle}>Enter one answer for each category. Blank or wrong-letter answers score zero.</Text>
             <View style={styles.fields}>
@@ -145,12 +150,12 @@ export default function SoloScreen() {
         {phase === 'result' && (
           <View style={styles.resultWrap}>
             <Text style={styles.resultEmoji}>{playerScore >= opponentScore ? '🏆' : '⚡'}</Text>
-            <Text style={styles.kicker}>GAME COMPLETE</Text>
+            <Text style={styles.kicker}>{isDaily ? 'DAILY COMPLETE' : 'GAME COMPLETE'}</Text>
             <Text testID="solo-result-title" style={styles.title}>{playerScore > opponentScore ? 'You win!' : playerScore === opponentScore ? 'It’s a draw!' : 'Computer wins'}</Text>
             <View style={styles.scoreRow}><ScoreCard name="You" score={playerScore} accent /><ScoreCard name="Computer" score={opponentScore} /></View>
             {saving && <View style={styles.savingRow}><ActivityIndicator color="#7CFD4D" /><Text style={styles.savingText}>Saving result…</Text></View>}
             {saveError && <View style={styles.errorBox}><Text style={styles.errorText}>{saveError}</Text><Pressable onPress={() => void saveResult(playerScore, opponentScore)}><Text style={styles.retryText}>Try again</Text></Pressable></View>}
-            <Pressable accessibilityRole="button" onPress={() => router.replace('/solo')} style={styles.primaryButton}><Text style={styles.primaryText}>Play again</Text></Pressable>
+            {!isDaily && <Pressable accessibilityRole="button" onPress={() => router.replace('/solo')} style={styles.primaryButton}><Text style={styles.primaryText}>Play again</Text></Pressable>}
             <Pressable accessibilityRole="button" onPress={() => router.replace('/game-lobby')} style={styles.secondaryButton}><Text style={styles.secondaryText}>Back to home</Text></Pressable>
           </View>
         )}

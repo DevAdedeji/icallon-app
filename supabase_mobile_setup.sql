@@ -1124,6 +1124,10 @@ BEGIN
   IF (normalized_mode = 'daily') <> (requested_challenge_date IS NOT NULL) THEN
     RAISE EXCEPTION 'Daily challenge date is required only for daily results' USING ERRCODE = '22023';
   END IF;
+  IF normalized_mode = 'daily'
+    AND requested_challenge_date <> timezone('utc', now())::date THEN
+    RAISE EXCEPTION 'Only today''s daily challenge can be recorded' USING ERRCODE = '22023';
+  END IF;
 
   INSERT INTO public.solo_results (
     id, user_id, mode, difficulty, category_pack,
@@ -1152,6 +1156,53 @@ $$;
 
 REVOKE ALL ON FUNCTION public.record_solo_result(text, text, text, text, integer, integer, date) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.record_solo_result(text, text, text, text, integer, integer, date) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_daily_challenge()
+RETURNS TABLE (
+  challenge_date date,
+  category_pack text,
+  seed text,
+  completed boolean,
+  player_score integer,
+  opponent_score integer
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  today date := timezone('utc', now())::date;
+  selected_pack text;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  selected_pack := (ARRAY['classic', 'world', 'food', 'entertainment'])[
+    mod(today - date '2026-01-01', 4) + 1
+  ];
+
+  RETURN QUERY
+  SELECT
+    today,
+    selected_pack,
+    'daily:' || today::text,
+    result.id IS NOT NULL,
+    result.player_score,
+    result.opponent_score
+  FROM (SELECT 1) AS singleton
+  LEFT JOIN public.solo_results AS result
+    ON result.user_id = caller_id::text
+    AND result.mode = 'daily'
+    AND result.challenge_date = today
+  LIMIT 1;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_daily_challenge() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_daily_challenge() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.get_my_game_stats()
 RETURNS TABLE (
