@@ -50,6 +50,7 @@ function RootNavigator() {
 
         <Stack.Protected guard={Boolean(session)}>
           <Stack.Screen name="game-lobby" />
+          <Stack.Screen name="profile" />
           <Stack.Screen name="create-room" />
           <Stack.Screen name="join-room" />
           <Stack.Screen name="lobby" />

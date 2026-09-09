@@ -36,6 +36,11 @@ export default function GameLobbyScreen() {
       <Text style={styles.kicker}>READY TO PLAY</Text>
       <Text style={styles.title}>Hey, {name}.</Text>
       <Text style={styles.subtitle}>Start a new word battle or enter a friend’s room code.</Text>
+      <Pressable accessibilityRole="button" testID="home-profile" style={styles.profileButton} onPress={() => router.push('/profile')}>
+        <AntDesign name="user" color="#7CFD4D" size={17} />
+        <Text style={styles.profileText}>Profile & game history</Text>
+        <AntDesign name="right" color="#9CB7A1" size={14} />
+      </Pressable>
       <Pressable accessibilityRole="button" testID="home-create-room" style={styles.primaryButton} onPress={() => router.push('/create-room')}>
         <Text style={styles.primaryText}>Create Room</Text>
       </Pressable>
@@ -71,6 +76,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Fonts.sans,
   },
+  profileButton: { minHeight: 52, marginTop: 8, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(124,253,77,0.25)', backgroundColor: 'rgba(124,253,77,0.07)', flexDirection: 'row', alignItems: 'center', gap: 10 },
+  profileText: { color: '#E6F3E8', fontSize: 14, fontWeight: '700', fontFamily: Fonts.sans, flex: 1 },
   button: {
     marginTop: 10,
     height: 50,

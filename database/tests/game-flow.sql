@@ -124,6 +124,37 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN
     NULL;
   END;
+
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  PERFORM * FROM public.end_game(created_room_id);
+  -- A retry must return the existing result rather than duplicate history.
+  PERFORM * FROM public.end_game(created_room_id);
+
+  IF (SELECT count(*) FROM public.game_results WHERE room_id = created_room_id) <> 1 THEN
+    RAISE EXCEPTION 'Ending a game did not create exactly one history snapshot';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM public.player_game_results AS result
+    JOIN public.game_results AS game ON game.id = result.game_result_id
+    WHERE game.room_id = created_room_id
+  ) <> 2 THEN
+    RAISE EXCEPTION 'Completed game history did not snapshot every player';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  IF (SELECT stats.games_played FROM public.get_my_game_stats() AS stats) <> 1 THEN
+    RAISE EXCEPTION 'Profile statistics did not include the completed game';
+  END IF;
+  IF (SELECT stats.wins FROM public.get_my_game_stats() AS stats) <> 1 THEN
+    RAISE EXCEPTION 'Winner statistics were not recorded';
+  END IF;
+  IF (SELECT stats.total_points FROM public.get_my_game_stats() AS stats) <> 10 THEN
+    RAISE EXCEPTION 'Profile total points were not recorded';
+  END IF;
+  IF (SELECT count(*) FROM public.get_my_match_history(20)) <> 1 THEN
+    RAISE EXCEPTION 'Match history did not return the completed game';
+  END IF;
 END;
 $$;
 
