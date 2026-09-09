@@ -26,6 +26,7 @@ export default function LobbyScreen() {
   const insets = useSafeAreaInsets();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const { session } = useAuth();
+  const userId = session?.user.id;
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [roomCode, setRoomCode] = useState('');
@@ -50,7 +51,7 @@ export default function LobbyScreen() {
   }, [roomId]);
 
   const loadRoom = useCallback(async () => {
-    if (!roomId || !session?.user.id) return;
+    if (!roomId || !userId) return;
     const { data, error: roomError } = await supabase
       .from('rooms')
       .select('id, code, host_id, status, category_pack, is_public')
@@ -62,13 +63,13 @@ export default function LobbyScreen() {
     setRoomCode(data.code);
     setPackName(categoryPackName(data.category_pack));
     setIsPublic(Boolean(data.is_public));
-    setIsHost(data.host_id === session.user.id);
+    setIsHost(data.host_id === userId);
     if (data.status === 'playing') {
       router.replace({ pathname: '/game', params: { roomId: data.id } });
     } else if (data.status === 'ended') {
       throw new Error('This game has already ended.');
     }
-  }, [roomId, session?.user.id]);
+  }, [roomId, userId]);
 
   useRoomPresence(roomId, async () => {
     await Promise.all([loadRoom(), loadPlayers()]);

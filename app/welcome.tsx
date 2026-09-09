@@ -1,13 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/features/auth/auth-context';
 import { Fonts } from '@/constants/theme';
 
 export default function WelcomeScreen() {
-  const fade = useRef(new Animated.Value(0)).current;
-  const rise = useRef(new Animated.Value(20)).current;
-  const glow = useRef(new Animated.Value(0.4)).current;
+  const [fade] = useState(() => new Animated.Value(0));
+  const [rise] = useState(() => new Animated.Value(20));
+  const [glow] = useState(() => new Animated.Value(0.4));
   const { session } = useAuth();
 
   useEffect(() => {
@@ -107,7 +107,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   backgroundLayer: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     overflow: 'hidden',
   },
   orbLarge: {
