@@ -80,11 +80,41 @@ CREATE TABLE IF NOT EXISTS public.player_game_results (
   CONSTRAINT player_game_results_position_positive CHECK (position > 0)
 );
 
+CREATE TABLE IF NOT EXISTS public.solo_results (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  mode text NOT NULL,
+  difficulty text NOT NULL,
+  category_pack text NOT NULL,
+  player_score integer NOT NULL,
+  opponent_score integer NOT NULL,
+  won boolean NOT NULL,
+  challenge_date date,
+  created_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT solo_results_mode_valid CHECK (mode IN ('solo', 'daily')),
+  CONSTRAINT solo_results_difficulty_valid CHECK (difficulty IN ('easy', 'medium', 'hard')),
+  CONSTRAINT solo_results_pack_valid CHECK (category_pack IN ('classic', 'world', 'food', 'entertainment')),
+  CONSTRAINT solo_results_player_score_valid CHECK (player_score BETWEEN 0 AND 120),
+  CONSTRAINT solo_results_opponent_score_valid CHECK (opponent_score BETWEEN 0 AND 120),
+  CONSTRAINT solo_results_daily_date_valid CHECK (
+    (mode = 'daily' AND challenge_date IS NOT NULL)
+    OR (mode = 'solo' AND challenge_date IS NULL)
+  )
+);
+
 CREATE INDEX IF NOT EXISTS player_game_results_user_history_idx
   ON public.player_game_results (user_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS solo_results_user_history_idx
+  ON public.solo_results (user_id, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS solo_results_daily_user_date_unique
+  ON public.solo_results (user_id, challenge_date)
+  WHERE mode = 'daily';
+
 ALTER TABLE public.game_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.player_game_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.solo_results ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Participants can view their game results" ON public.game_results;
 CREATE POLICY "Participants can view their game results" ON public.game_results
@@ -103,9 +133,15 @@ CREATE POLICY "Players can view their result rows" ON public.player_game_results
   FOR SELECT TO authenticated
   USING (user_id = (SELECT auth.uid())::text);
 
+DROP POLICY IF EXISTS "Players can view their solo results" ON public.solo_results;
+CREATE POLICY "Players can view their solo results" ON public.solo_results
+  FOR SELECT TO authenticated
+  USING (user_id = (SELECT auth.uid())::text);
+
 -- History is written only by trusted game functions.
 REVOKE INSERT, UPDATE, DELETE ON public.game_results FROM anon, authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.player_game_results FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.solo_results FROM anon, authenticated;
 
 -- Create the room and its host player atomically. Generating the code in the
 -- database removes the client-side check/insert race around unique room codes.
@@ -1050,6 +1086,72 @@ $$;
 
 REVOKE ALL ON FUNCTION public.request_game_rematch(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.request_game_rematch(text) TO authenticated;
+
+-- Persist one completed solo/daily run. The client-generated result id makes
+-- retries safe, while score bounds prevent corrupt profile aggregates.
+CREATE OR REPLACE FUNCTION public.record_solo_result(
+  requested_result_id text,
+  requested_mode text,
+  requested_difficulty text,
+  requested_category_pack text,
+  requested_player_score integer,
+  requested_opponent_score integer,
+  requested_challenge_date date DEFAULT NULL
+)
+RETURNS TABLE (result_id text, won boolean, created_at timestamp)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  normalized_mode text := lower(trim(requested_mode));
+  saved_result public.solo_results%ROWTYPE;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+  IF length(trim(requested_result_id)) < 8 OR length(trim(requested_result_id)) > 100 THEN
+    RAISE EXCEPTION 'Invalid result id' USING ERRCODE = '22023';
+  END IF;
+  IF normalized_mode NOT IN ('solo', 'daily')
+    OR requested_difficulty NOT IN ('easy', 'medium', 'hard')
+    OR requested_category_pack NOT IN ('classic', 'world', 'food', 'entertainment')
+    OR requested_player_score NOT BETWEEN 0 AND 120
+    OR requested_opponent_score NOT BETWEEN 0 AND 120 THEN
+    RAISE EXCEPTION 'Invalid solo result' USING ERRCODE = '22023';
+  END IF;
+  IF (normalized_mode = 'daily') <> (requested_challenge_date IS NOT NULL) THEN
+    RAISE EXCEPTION 'Daily challenge date is required only for daily results' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.solo_results (
+    id, user_id, mode, difficulty, category_pack,
+    player_score, opponent_score, won, challenge_date
+  ) VALUES (
+    trim(requested_result_id), caller_id::text, normalized_mode,
+    requested_difficulty, requested_category_pack,
+    requested_player_score, requested_opponent_score,
+    requested_player_score > requested_opponent_score,
+    requested_challenge_date
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  SELECT result.* INTO saved_result
+  FROM public.solo_results AS result
+  WHERE result.id = trim(requested_result_id)
+    AND result.user_id = caller_id::text;
+
+  IF saved_result.id IS NULL THEN
+    RAISE EXCEPTION 'Result id is already in use' USING ERRCODE = '23505';
+  END IF;
+
+  RETURN QUERY SELECT saved_result.id, saved_result.won, saved_result.created_at;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.record_solo_result(text, text, text, text, integer, integer, date) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.record_solo_result(text, text, text, text, integer, integer, date) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.get_my_game_stats()
 RETURNS TABLE (

@@ -33,6 +33,17 @@ BEGIN
     RAISE EXCEPTION 'Host player was not created atomically';
   END IF;
 
+  PERFORM * FROM public.record_solo_result(
+    'solo-test-result-1', 'solo', 'medium', 'classic', 80, 70, NULL
+  );
+  PERFORM * FROM public.record_solo_result(
+    'solo-test-result-1', 'solo', 'medium', 'classic', 80, 70, NULL
+  );
+  IF (SELECT count(*) FROM public.solo_results WHERE id = 'solo-test-result-1') <> 1
+    OR NOT (SELECT won FROM public.solo_results WHERE id = 'solo-test-result-1') THEN
+    RAISE EXCEPTION 'Solo result persistence was not idempotent';
+  END IF;
+
   PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
   SELECT result.player_id INTO joined_player_id
   FROM public.join_game_room(created_room_code) AS result;
