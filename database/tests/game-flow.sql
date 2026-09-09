@@ -44,6 +44,19 @@ BEGIN
     RAISE EXCEPTION 'Solo result persistence was not idempotent';
   END IF;
 
+  IF (SELECT challenge.completed FROM public.get_daily_challenge() AS challenge) THEN
+    RAISE EXCEPTION 'Fresh daily challenge was unexpectedly complete';
+  END IF;
+  PERFORM * FROM public.record_solo_result(
+    'daily-test-result-1', 'daily', 'hard',
+    (SELECT challenge.category_pack FROM public.get_daily_challenge() AS challenge),
+    100, 110, timezone('utc', now())::date
+  );
+  IF NOT (SELECT challenge.completed FROM public.get_daily_challenge() AS challenge)
+    OR (SELECT challenge.player_score FROM public.get_daily_challenge() AS challenge) <> 100 THEN
+    RAISE EXCEPTION 'Daily challenge completion was not returned';
+  END IF;
+
   PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
   SELECT result.player_id INTO joined_player_id
   FROM public.join_game_room(created_room_code) AS result;
