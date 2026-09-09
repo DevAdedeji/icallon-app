@@ -1,13 +1,16 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
 import { getActiveRoomSession, type ActiveRoomSession } from '@/features/rooms/room-service';
 import { supabase } from '@/lib/supabase/client';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
+import { useGameFeedback } from '@/features/feedback/game-feedback';
 
 export default function GameLobbyScreen() {
+  const { soundEnabled, toggleSound } = useGameFeedback();
   const [name, setName] = useState('Player');
   const [activeRoom, setActiveRoom] = useState<ActiveRoomSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,10 @@ export default function GameLobbyScreen() {
       <Text style={styles.kicker}>READY TO PLAY</Text>
       <Text style={styles.title}>Hey, {name}.</Text>
       <Text style={styles.subtitle}>Start a new word battle or enter a friend’s room code.</Text>
+      <Pressable accessibilityRole="switch" accessibilityState={{ checked: soundEnabled }} style={styles.soundButton} onPress={toggleSound}>
+        <AntDesign name={soundEnabled ? 'sound' : 'sound'} color={soundEnabled ? '#7CFD4D' : '#78917D'} size={16} />
+        <Text style={[styles.soundText, !soundEnabled && styles.soundTextMuted]}>Game sounds {soundEnabled ? 'on' : 'off'}</Text>
+      </Pressable>
       {activeRoom && (
         <Pressable
           accessibilityRole="button"
@@ -126,6 +133,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Fonts.sans,
   },
+  soundButton: { alignSelf: 'flex-start', minHeight: 38, paddingHorizontal: 11, borderRadius: 19, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.05)', flexDirection: 'row', alignItems: 'center', gap: 7 },
+  soundText: { color: '#CFE7D4', fontFamily: Fonts.sans, fontSize: 12, fontWeight: '700' },
+  soundTextMuted: { color: '#78917D' },
   resumeCard: { minHeight: 68, marginTop: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(124,253,77,0.5)', backgroundColor: 'rgba(124,253,77,0.12)', flexDirection: 'row', alignItems: 'center', gap: 12 },
   resumeIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#7CFD4D', alignItems: 'center', justifyContent: 'center' },
   resumeCopy: { flex: 1 },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -21,10 +21,13 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import { AnswerValues, EMPTY_ANSWERS, GameAnswer, getPlayer, Player, Room, Round } from '@/lib/game';
 import { useRoomPresence } from '@/features/rooms/use-room-presence';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
+import { useGameFeedback } from '@/features/feedback/game-feedback';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 export default function GameScreen() {
+  const { playSound } = useGameFeedback();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const { session } = useAuth();
   const userId = session?.user.id;
@@ -42,9 +45,18 @@ export default function GameScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
   const answersReady = useRef(false);
+  const answersRef = useRef<AnswerValues>(EMPTY_ANSWERS);
+  const hasSubmittedRef = useRef(false);
   const endRequested = useRef(false);
+  const lastCountdownSound = useRef<number | null>(null);
+  const lastRoundSound = useRef<string | null>(null);
 
   const isHost = Boolean(room && userId && room.host_id === userId);
+
+  useEffect(() => {
+    answersRef.current = answers;
+    hasSubmittedRef.current = hasSubmitted;
+  }, [answers, hasSubmitted]);
 
   const loadGame = useCallback(async () => {
     if (!roomId || !userId) {
@@ -163,17 +175,44 @@ export default function GameScreen() {
       setSecondsLeft(remaining);
       if (remaining === 0 && !endRequested.current) {
         endRequested.current = true;
-        closeSubmissions(round.id).catch(() => {
-          // The database clock is authoritative. Retry if this device reached
-          // zero slightly early instead of leaving the round stuck.
-          endRequested.current = false;
-        });
+        void (async () => {
+          try {
+            if (player && !hasSubmittedRef.current) {
+              await saveGameAnswers(room.id, round.id, answersRef.current, true);
+              setHasSubmitted(true);
+            }
+            // Give every connected device time to flush its final keystroke.
+            await new Promise((resolve) => setTimeout(resolve, 850));
+            await closeSubmissions(round.id);
+          } catch {
+            // Retry if this device reached zero slightly before the database.
+            endRequested.current = false;
+          }
+        })();
       }
     };
     tick();
     const timer = setInterval(tick, 500);
     return () => clearInterval(timer);
-  }, [round, room]);
+  }, [player, round, room]);
+
+  useEffect(() => {
+    if (round?.status !== 'active' || secondsLeft < 1 || secondsLeft > 5) {
+      lastCountdownSound.current = null;
+      return;
+    }
+    if (lastCountdownSound.current !== secondsLeft) {
+      lastCountdownSound.current = secondsLeft;
+      playSound('countdown');
+    }
+  }, [playSound, round?.status, secondsLeft]);
+
+  useEffect(() => {
+    if (round?.status === 'active' && lastRoundSound.current !== round.id) {
+      lastRoundSound.current = round.id;
+      playSound('roundStart');
+    }
+  }, [playSound, round?.id, round?.status]);
 
   useEffect(() => {
     if (!round || !player || round.status !== 'active' || !answersReady.current || hasSubmitted) return;
@@ -198,19 +237,35 @@ export default function GameScreen() {
     if (!round || !player) return;
     setSaving(true);
     try {
-      await saveGameAnswers(roomId, round.id, answers, true);
+      if (!hasSubmitted) {
+        await saveGameAnswers(roomId, round.id, answers, true);
+      }
       setHasSubmitted(true);
-      setNotice('Answers submitted. Waiting for the host to review.');
+      setNotice(room?.is_public
+        ? 'Answers submitted. Waiting for automatic scoring.'
+        : 'Answers submitted. Waiting for the host to review.');
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not submit answers'); }
     finally { setSaving(false); }
   };
 
   const finishSubmissions = async () => {
-    if (!round || !isHost) return;
+    if (!round || !player || !isHost || saving) return;
+    setSaving(true);
     try {
+      // Persist the host's current input before the database promotes every
+      // player's autosaved draft to a final submission.
+      if (!hasSubmitted) {
+        await saveGameAnswers(roomId, round.id, answers, true);
+      }
+      playSound('submit');
+      // Autosave is debounced on every device. Let other players' final
+      // keystrokes arrive before the database promotes all drafts.
+      await new Promise((resolve) => setTimeout(resolve, 850));
       await closeSubmissions(round.id);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not close submissions.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -240,6 +295,7 @@ export default function GameScreen() {
     setSaving(true);
     try {
       await confirmRound(round.id);
+      playSound('success');
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not confirm this round'); }
     finally { setSaving(false); }
   };
@@ -275,7 +331,9 @@ export default function GameScreen() {
   const categories = categoryEntries(room.category_pack, room.category_labels);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <Pressable onPress={() => router.replace('/game-lobby')}><AntDesign name="close" color="#9CB7A1" size={22} /></Pressable>
         <View style={styles.roomIdentity}>
@@ -286,29 +344,49 @@ export default function GameScreen() {
         </View>
         <Text style={styles.roundCount}>R{Math.min(roundNumber, room.max_rounds)}/{room.max_rounds}</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        contentContainerStyle={styles.content}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled">
         {notice && <Pressable style={styles.notice} onPress={() => setNotice(null)}><Text style={styles.noticeText}>{notice}</Text></Pressable>}
-        {!round && <LetterPicker number={roundNumber} isHost={isHost} onPick={chooseLetter} busy={saving} />}
-        {round?.status === 'active' && <AnswerEntry categories={categories} round={round} answers={answers} onChange={setAnswers} secondsLeft={secondsLeft} saving={saving} submitted={hasSubmitted} isHost={isHost} onSubmit={submitAnswers} onEnd={finishSubmissions} />}
+        {!round && <LetterPicker number={roundNumber} isHost={isHost} isPublic={room.is_public} onPick={chooseLetter} busy={saving} />}
+        {round?.status === 'active' && <AnswerEntry categories={categories} round={round} answers={answers} onChange={setAnswers} secondsLeft={secondsLeft} saving={saving} submitted={hasSubmitted} isHost={isHost} isPublic={room.is_public} onSubmit={submitAnswers} onEnd={finishSubmissions} />}
         {round?.status === 'submitted' && <Review categories={categories} round={round} answers={reviewAnswers} isHost={isHost} onValidate={validate} onConfirm={confirmReview} busy={saving} />}
         {round?.status === 'ended' && (round.round_number >= room.max_rounds
           ? <RoundComplete isHost={isHost} final onFinish={endGame} />
           : isHost
-            ? <LetterPicker number={round.round_number + 1} isHost onPick={chooseLetter} busy={saving} />
+            ? <LetterPicker number={round.round_number + 1} isHost isPublic={room.is_public} onPick={chooseLetter} busy={saving} />
             : <RoundComplete isHost={false} final={false} onFinish={endGame} />)}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-function LetterPicker({ number, isHost, onPick, busy }: { number: number; isHost: boolean; onPick: (letter: string) => void; busy: boolean }) {
+function LetterPicker({ number, isHost, isPublic, onPick, busy }: { number: number; isHost: boolean; isPublic: boolean; onPick: (letter: string) => void; busy: boolean }) {
   if (!isHost) return <Waiting text="The host is choosing the letter for this round…" />;
+  if (isPublic) return <View><Text style={styles.kicker}>ROUND {number}</Text><Text style={styles.title}>Ready for the draw?</Text><Text style={styles.subtitle}>The server picks an unused letter so Quick Match stays fair for everyone.</Text><Pressable accessibilityRole="button" disabled={busy} onPress={() => onPick('A')} style={[styles.primaryButton, busy && styles.disabled]}>{busy ? <ActivityIndicator color="#071108" /> : <Text style={styles.primaryText}>Draw letter & start</Text>}</Pressable></View>;
   return <View><Text style={styles.kicker}>ROUND {number}</Text><Text style={styles.title}>Choose a letter</Text><Text style={styles.subtitle}>Everyone’s answers must start with this letter.</Text><View style={styles.letters}>{LETTERS.map(letter => <Pressable accessibilityRole="button" testID={`letter-option-${letter}`} disabled={busy} key={letter} onPress={() => onPick(letter)} style={styles.letter}><View style={styles.letterGlyph}><Text style={[styles.letterText, styles.centeredLetterText]}>{letter}</Text></View></Pressable>)}</View></View>;
 }
 
-function AnswerEntry({ categories, round, answers, onChange, secondsLeft, saving, submitted, isHost, onSubmit, onEnd }: { categories: ReturnType<typeof categoryEntries>; round: Round; answers: AnswerValues; onChange: (next: AnswerValues) => void; secondsLeft: number; saving: boolean; submitted: boolean; isHost: boolean; onSubmit: () => void; onEnd: () => void }) {
+function AnswerEntry({ categories, round, answers, onChange, secondsLeft, saving, submitted, isHost, isPublic, onSubmit, onEnd }: { categories: ReturnType<typeof categoryEntries>; round: Round; answers: AnswerValues; onChange: (next: AnswerValues) => void; secondsLeft: number; saving: boolean; submitted: boolean; isHost: boolean; isPublic: boolean; onSubmit: () => void; onEnd: () => void }) {
   const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
-  return <View><View style={styles.gameHeader}><View><Text style={styles.kicker}>LETTER</Text><Text style={styles.bigLetter}>{round.letter}</Text></View><View style={[styles.timer, secondsLeft <= 10 && styles.timerDanger]}><Text style={styles.timerText}>{clock}</Text></View></View><Text style={styles.subtitle}>{submitted ? 'Answers submitted. Waiting for review.' : 'Enter one answer for each category. Answers save automatically.'}</Text><View style={styles.fields}>{categories.map(({ key, label }) => <View key={key}><Text style={styles.label}>{label}</Text><TextInput testID={`answer-${key}`} value={answers[key]} onChangeText={text => onChange({ ...answers, [key]: text })} autoCapitalize="words" autoCorrect={false} editable={secondsLeft > 0 && !submitted} placeholder={`${label} starting with ${round.letter}`} placeholderTextColor="#6C806F" style={[styles.input, submitted && styles.disabled]} /></View>)}</View><Pressable accessibilityRole="button" testID="submit-answers-button" disabled={saving || secondsLeft === 0 || submitted} onPress={onSubmit} style={[styles.primaryButton, (saving || secondsLeft === 0 || submitted) && styles.disabled]}>{saving ? <ActivityIndicator color="#071108" /> : <Text style={styles.primaryText}>{submitted ? 'Answers submitted' : 'Submit answers'}</Text>}</Pressable>{isHost && <Pressable accessibilityRole="button" testID="close-submissions-button" onPress={onEnd} style={styles.secondaryButton}><Text style={styles.secondaryText}>End submissions & review</Text></Pressable>}</View>;
+  const [letterEntrance] = useState(() => new Animated.Value(0.65));
+  const [timerPulse] = useState(() => new Animated.Value(1));
+
+  useEffect(() => {
+    Animated.spring(letterEntrance, { toValue: 1, friction: 5, tension: 90, useNativeDriver: true }).start();
+  }, [letterEntrance, round.id]);
+
+  useEffect(() => {
+    if (secondsLeft > 10 || secondsLeft < 1) return;
+    Animated.sequence([
+      Animated.timing(timerPulse, { toValue: 1.08, duration: 110, useNativeDriver: true }),
+      Animated.timing(timerPulse, { toValue: 1, duration: 170, useNativeDriver: true }),
+    ]).start();
+  }, [secondsLeft, timerPulse]);
+
+  return <View><View style={styles.gameHeader}><View><Text style={styles.kicker}>LETTER</Text><Animated.Text style={[styles.bigLetter, { transform: [{ scale: letterEntrance }] }]}>{round.letter}</Animated.Text></View><Animated.View style={[styles.timer, secondsLeft <= 10 && styles.timerDanger, { transform: [{ scale: timerPulse }] }]}><Text style={styles.timerText}>{clock}</Text></Animated.View></View><Text style={styles.subtitle}>{submitted ? `Answers submitted. Waiting for ${isPublic ? 'scoring' : 'review'}.` : 'Enter one answer for each category. Answers save automatically.'}</Text><View style={styles.fields}>{categories.map(({ key, label }) => <View key={key}><Text style={styles.label}>{label}</Text><TextInput testID={`answer-${key}`} value={answers[key]} onChangeText={text => onChange({ ...answers, [key]: text })} autoCapitalize="words" autoCorrect={false} editable={secondsLeft > 0 && !submitted} placeholder={`${label} starting with ${round.letter}`} placeholderTextColor="#6C806F" style={[styles.input, submitted && styles.disabled]} /></View>)}</View><Pressable accessibilityRole="button" testID="submit-answers-button" disabled={saving || secondsLeft === 0 || submitted} onPress={onSubmit} style={[styles.primaryButton, (saving || secondsLeft === 0 || submitted) && styles.disabled]}>{saving ? <ActivityIndicator color="#071108" /> : <Text style={styles.primaryText}>{submitted ? 'Answers submitted' : 'Submit answers'}</Text>}</Pressable>{isHost && <Pressable accessibilityRole="button" testID="close-submissions-button" disabled={saving} onPress={onEnd} style={[styles.secondaryButton, saving && styles.disabled]}><Text style={styles.secondaryText}>{isPublic ? 'End submissions & score' : 'End submissions & review'}</Text></Pressable>}</View>;
 }
 
 function Review({ categories, round, answers, isHost, onValidate, onConfirm, busy }: { categories: ReturnType<typeof categoryEntries>; round: Round; answers: GameAnswer[]; isHost: boolean; onValidate: (answer: GameAnswer, category: keyof AnswerValues, valid: boolean) => void; onConfirm: () => void; busy: boolean }) {

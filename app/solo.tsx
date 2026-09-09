@@ -1,22 +1,24 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
 import { CATEGORY_PACKS, categoryEntries, type CategoryPackId } from '@/features/game/category-packs';
-import { computerAnswers, scoreSoloRound, soloLetters, type SoloDifficulty, type SoloRoundScore } from '@/features/solo/solo-engine';
+import { computerAnswers, scoreSoloRound, SOLO_MODE_RULES, soloLetters, type SoloDifficulty, type SoloRoundScore } from '@/features/solo/solo-engine';
 import { recordSoloResult } from '@/features/solo/solo-service';
 import { EMPTY_ANSWERS, type AnswerValues } from '@/lib/game';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
+import { useGameFeedback } from '@/features/feedback/game-feedback';
 
 type SoloPack = Exclude<CategoryPackId, 'custom'>;
 type Phase = 'setup' | 'answering' | 'review' | 'result';
 
 const DIFFICULTIES: { id: SoloDifficulty; name: string; detail: string }[] = [
-  { id: 'easy', name: 'Easy', detail: 'Computer fills 2 categories' },
-  { id: 'medium', name: 'Medium', detail: 'Computer fills 3 categories' },
-  { id: 'hard', name: 'Hard', detail: 'Computer fills all categories' },
+  { id: 'easy', name: SOLO_MODE_RULES.easy.label, detail: SOLO_MODE_RULES.easy.detail },
+  { id: 'medium', name: SOLO_MODE_RULES.medium.label, detail: SOLO_MODE_RULES.medium.detail },
+  { id: 'hard', name: SOLO_MODE_RULES.hard.label, detail: SOLO_MODE_RULES.hard.detail },
 ];
 
 function resultId(): string {
@@ -24,6 +26,7 @@ function resultId(): string {
 }
 
 export default function SoloScreen() {
+  const { playSound } = useGameFeedback();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string; pack?: string; date?: string; seed?: string }>();
   const isDaily = params.mode === 'daily';
@@ -41,9 +44,13 @@ export default function SoloScreen() {
   const [opponentScore, setOpponentScore] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const letters = useMemo(() => soloLetters(pack, seed), [pack, seed]);
+  const rules = SOLO_MODE_RULES[difficulty];
+  const letters = useMemo(() => soloLetters(pack, seed, rules.roundCount), [pack, rules.roundCount, seed]);
   const categories = categoryEntries(pack, null);
   const letter = letters[roundIndex];
+  const [secondsLeft, setSecondsLeft] = useState(rules.secondsPerRound);
+  const autoSubmittedRound = useRef<string | null>(null);
+  const lastCountdownSound = useRef<number | null>(null);
 
   const begin = () => {
     setRoundIndex(0);
@@ -51,18 +58,48 @@ export default function SoloScreen() {
     setPlayerScore(0);
     setOpponentScore(0);
     setRoundScore(null);
+    setSecondsLeft(rules.secondsPerRound);
     setPhase('answering');
+    playSound('roundStart');
   };
 
-  const submit = () => {
-    const nextOpponent = computerAnswers(pack, letter, difficulty, seed);
+  const submit = useCallback(() => {
+    const nextOpponent = computerAnswers(pack, letter);
     const score = scoreSoloRound(answers, nextOpponent, letter);
     setOpponent(nextOpponent);
     setRoundScore(score);
     setPlayerScore((current) => current + score.playerPoints);
     setOpponentScore((current) => current + score.opponentPoints);
     setPhase('review');
-  };
+    playSound('submit');
+  }, [answers, letter, pack, playSound]);
+
+  useEffect(() => {
+    if (phase !== 'answering') return;
+    const timer = setInterval(() => {
+      setSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [phase, roundIndex]);
+
+  useEffect(() => {
+    if (phase !== 'answering' || secondsLeft !== 0) return;
+    const roundKey = `${roundIndex}:${letter}`;
+    if (autoSubmittedRound.current === roundKey) return;
+    autoSubmittedRound.current = roundKey;
+    submit();
+  }, [letter, phase, roundIndex, secondsLeft, submit]);
+
+  useEffect(() => {
+    if (phase !== 'answering' || secondsLeft < 1 || secondsLeft > 5) {
+      lastCountdownSound.current = null;
+      return;
+    }
+    if (lastCountdownSound.current !== secondsLeft) {
+      lastCountdownSound.current = secondsLeft;
+      playSound('countdown');
+    }
+  }, [phase, playSound, secondsLeft]);
 
   const saveResult = async (finalPlayerScore: number, finalOpponentScore: number) => {
     setSaving(true);
@@ -93,11 +130,15 @@ export default function SoloScreen() {
     setRoundIndex((current) => current + 1);
     setAnswers(EMPTY_ANSWERS);
     setRoundScore(null);
+    setSecondsLeft(rules.secondsPerRound);
     setPhase('answering');
+    playSound('roundStart');
   };
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
           <AntDesign name="arrow-left" size={20} color="#CFE7D4" />
@@ -105,12 +146,16 @@ export default function SoloScreen() {
         </Pressable>
         {phase !== 'setup' && phase !== 'result' && <Text style={styles.roundIndicator}>ROUND {roundIndex + 1}/{letters.length}</Text>}
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <ScrollView
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.content}>
         {phase === 'setup' && !isDaily && (
           <>
             <Text style={styles.kicker}>SOLO MODE</Text>
             <Text style={styles.title}>Beat the computer</Text>
-            <Text style={styles.subtitle}>Three fast rounds. Unique valid answers score 10; matching the computer scores 5.</Text>
+            <Text style={styles.subtitle}>The computer answers every category. Choose how many timed rounds you want to survive.</Text>
             <Text style={styles.sectionLabel}>Choose a pack</Text>
             <View style={styles.options}>
               {CATEGORY_PACKS.map((item) => <Pressable testID={`solo-pack-${item.id}`} key={item.id} onPress={() => setPack(item.id)} style={[styles.option, pack === item.id && styles.optionActive]}><Text style={[styles.optionTitle, pack === item.id && styles.optionTitleActive]}>{item.name}</Text><Text style={styles.optionDetail}>{item.labels.join(' · ')}</Text></Pressable>)}
@@ -125,13 +170,12 @@ export default function SoloScreen() {
 
         {phase === 'answering' && (
           <>
-            <Text style={styles.kicker}>{isDaily ? 'DAILY CHALLENGE' : 'YOUR LETTER'}</Text>
-            <Text testID="solo-letter" style={styles.letter}>{letter}</Text>
-            <Text style={styles.subtitle}>Enter one answer for each category. Blank or wrong-letter answers score zero.</Text>
+            <View style={styles.soloGameHeader}><View><Text style={styles.kicker}>{isDaily ? 'DAILY CHALLENGE' : 'YOUR LETTER'}</Text><Text testID="solo-letter" style={styles.letter}>{letter}</Text></View><View style={[styles.timer, secondsLeft <= 10 && styles.timerDanger]}><Text style={styles.timerText}>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}</Text></View></View>
+            <Text style={styles.subtitle}>ICallOn is the referee: wrong-letter and blank answers score zero; matching the computer scores 5.</Text>
             <View style={styles.fields}>
               {categories.map(({ key, label }) => <View key={key}><Text style={styles.fieldLabel}>{label}</Text><TextInput testID={`solo-answer-${key}`} value={answers[key]} onChangeText={(value) => setAnswers((current) => ({ ...current, [key]: value }))} autoCapitalize="words" autoCorrect={false} placeholder={`${label} starting with ${letter}`} placeholderTextColor="#6C806F" style={styles.input} /></View>)}
             </View>
-            <Pressable testID="solo-submit" accessibilityRole="button" onPress={submit} style={styles.primaryButton}><Text style={styles.primaryText}>Lock in answers</Text></Pressable>
+            <Pressable testID="solo-submit" accessibilityRole="button" disabled={secondsLeft === 0} onPress={submit} style={[styles.primaryButton, secondsLeft === 0 && styles.disabled]}><Text style={styles.primaryText}>Lock in answers</Text></Pressable>
           </>
         )}
 
@@ -160,7 +204,7 @@ export default function SoloScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -186,6 +230,10 @@ const styles = StyleSheet.create({
   optionTitleActive: { color: '#7CFD4D' },
   optionDetail: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 11, marginTop: 4 },
   letter: { color: '#7CFD4D', fontFamily: Fonts.rounded, fontWeight: '900', fontSize: 86, lineHeight: 96 },
+  soloGameHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  timer: { minWidth: 86, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(124,253,77,0.35)', backgroundColor: 'rgba(124,253,77,0.1)', paddingHorizontal: 13, paddingVertical: 10, alignItems: 'center' },
+  timerDanger: { borderColor: 'rgba(255,107,107,0.65)', backgroundColor: 'rgba(255,107,107,0.12)' },
+  timerText: { color: '#F3FFF6', fontFamily: Fonts.mono, fontWeight: '900', fontSize: 18 },
   fields: { gap: 13, marginBottom: 22 },
   fieldLabel: { color: '#9CB7A1', fontFamily: Fonts.mono, fontSize: 11, letterSpacing: 1.1, textTransform: 'uppercase', marginBottom: 6 },
   input: { height: 52, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(255,255,255,0.07)', color: '#F3FFF6', fontFamily: Fonts.sans, fontSize: 16, paddingHorizontal: 14 },
@@ -214,4 +262,5 @@ const styles = StyleSheet.create({
   errorBox: { borderRadius: 12, borderWidth: 1, borderColor: 'rgba(248,113,113,0.5)', backgroundColor: 'rgba(248,113,113,0.12)', padding: 13, marginBottom: 8 },
   errorText: { color: '#FCA5A5', fontFamily: Fonts.sans },
   retryText: { color: '#7CFD4D', fontFamily: Fonts.sans, fontWeight: '800', marginTop: 8 },
+  disabled: { opacity: 0.55 },
 });

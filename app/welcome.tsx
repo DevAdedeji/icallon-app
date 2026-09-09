@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Redirect, router } from 'expo-router';
 import { useAuth } from '@/features/auth/auth-context';
 import { Fonts } from '@/constants/theme';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function WelcomeScreen() {
   const [fade] = useState(() => new Animated.Value(0));
@@ -49,6 +50,10 @@ export default function WelcomeScreen() {
     }
   };
 
+  if (session) {
+    return <Redirect href="/game-lobby" />;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.backgroundLayer}>
@@ -85,14 +90,12 @@ export default function WelcomeScreen() {
             <Text style={styles.secondaryText}>Join Room</Text>
           </Pressable>
 
-          {!session && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/login')}
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryPressed]}>
-              <Text style={styles.secondaryText}>Login</Text>
-            </Pressable>
-          )}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/login')}
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryPressed]}>
+            <Text style={styles.secondaryText}>Login</Text>
+          </Pressable>
         </View>
       </Animated.View>
     </View>

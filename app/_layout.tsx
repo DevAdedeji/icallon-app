@@ -6,12 +6,15 @@ import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/features/auth/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { GameFeedbackProvider } from '@/features/feedback/game-feedback';
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <GameFeedbackProvider>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </GameFeedbackProvider>
   );
 }
 
@@ -43,11 +46,8 @@ function RootNavigator() {
         <Stack.Screen name="welcome" />
         <Stack.Screen name="invite" />
         <Stack.Screen name="auth/callback" />
-
-        <Stack.Protected guard={!session}>
-          <Stack.Screen name="login" />
-          <Stack.Screen name="signup" />
-        </Stack.Protected>
+        <Stack.Screen name="login" />
+        <Stack.Screen name="signup" />
 
         <Stack.Protected guard={Boolean(session)}>
           <Stack.Screen name="game-lobby" />

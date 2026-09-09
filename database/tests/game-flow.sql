@@ -13,6 +13,7 @@ DECLARE
   returned_points integer;
   public_room_id text;
   matched_public_room_id text;
+  public_round_id text;
 BEGIN
   PERFORM set_config('request.jwt.claim.role', 'authenticated', false);
   PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
@@ -48,10 +49,13 @@ BEGIN
   END IF;
 
   SELECT match.room_id INTO public_room_id
-  FROM public.join_public_matchmaking('food') AS match;
+  FROM public.create_public_match_room('food') AS match;
   IF NOT (SELECT is_public FROM public.rooms WHERE id = public_room_id)
     OR (SELECT max_players FROM public.rooms WHERE id = public_room_id) <> 4 THEN
     RAISE EXCEPTION 'Public matchmaking did not create a bounded public room';
+  END IF;
+  IF (SELECT count(*) FROM public.list_public_match_rooms('food')) <> 1 THEN
+    RAISE EXCEPTION 'Public room browser did not return the open match';
   END IF;
 
   IF (SELECT challenge.completed FROM public.get_daily_challenge() AS challenge) THEN
@@ -69,10 +73,35 @@ BEGIN
 
   PERFORM set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', false);
   SELECT match.room_id INTO matched_public_room_id
-  FROM public.join_public_matchmaking('food') AS match;
+  FROM public.join_public_match_room(public_room_id) AS match;
   IF matched_public_room_id <> public_room_id
     OR (SELECT count(*) FROM public.players WHERE room_id = public_room_id) <> 2 THEN
     RAISE EXCEPTION 'Compatible public room was not filled before creating another';
+  END IF;
+
+  -- Public matches draw their letter and finalize scoring without letting the
+  -- creator review an opponent's answers.
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  PERFORM * FROM public.start_game(public_room_id);
+  SELECT result.round_id INTO public_round_id
+  FROM public.start_game_round(public_room_id, 'a') AS result;
+  PERFORM * FROM public.save_game_answers(
+    public_room_id, public_round_id, 'Frank', 'Fox', 'France', 'Fork', false
+  );
+
+  PERFORM set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', false);
+  PERFORM * FROM public.save_game_answers(
+    public_room_id, public_round_id, 'Fiona', 'Falcon', 'Finland', 'Fan', false
+  );
+
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  PERFORM * FROM public.close_game_submissions(public_round_id);
+  IF (SELECT status FROM public.rounds WHERE id = public_round_id) <> 'ended'
+    OR EXISTS (
+      SELECT 1 FROM public.answers
+      WHERE round_id = public_round_id AND submitted_at IS NULL
+    ) THEN
+    RAISE EXCEPTION 'Public round was not automatically submitted and finalized';
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
@@ -140,10 +169,6 @@ BEGIN
     NULL;
   END;
 
-  PERFORM * FROM public.save_game_answers(
-    created_room_id, created_round_id, 'Alice', 'Ant', 'Athens', 'Anchor', true
-  );
-
   -- A non-host cannot close submissions before the timer expires.
   BEGIN
     PERFORM * FROM public.close_game_submissions(created_round_id);
@@ -157,6 +182,10 @@ BEGIN
     created_room_id, created_round_id, 'Henry', '  ANT  ', 'Helsinki', 'Hammer', true
   );
   PERFORM * FROM public.close_game_submissions(created_round_id);
+
+  IF (SELECT submitted_at FROM public.answers WHERE id = player_answer_id) IS NULL THEN
+    RAISE EXCEPTION 'Closing submissions did not promote the player draft';
+  END IF;
 
   IF (SELECT points_earned FROM public.answers WHERE id = player_answer_id) <> 35 THEN
     RAISE EXCEPTION 'Expected duplicate answer to receive 5 points';

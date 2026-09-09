@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, Pressable, ScrollView, StyleSheet,
+  View, Text, ScrollView, StyleSheet,
   ActivityIndicator, Share,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -13,6 +13,7 @@ import { startGame } from '@/features/game/game-service';
 import { useRoomPresence } from '@/features/rooms/use-room-presence';
 import { buildRoomInvite } from '@/features/rooms/room-invite';
 import { categoryPackName } from '@/features/game/category-packs';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 type Player = {
   id: string;
@@ -160,6 +161,7 @@ export default function LobbyScreen() {
           <View style={styles.header}>
             <Text style={styles.kicker}>GAME LOBBY</Text>
             {isPublic && <Text testID="public-room-badge" style={styles.publicBadge}>PUBLIC QUICK MATCH</Text>}
+            {isPublic && <Text style={styles.publicRules}>Random letters · automatic rule-based scoring</Text>}
             <Text style={connectionStatus === 'connected' ? styles.connectedText : styles.offlineText}>
               {connectionStatus === 'connected' ? 'LIVE' : connectionStatus === 'connecting' ? 'CONNECTING…' : 'RECONNECTING…'}
             </Text>
@@ -255,6 +257,7 @@ const styles = StyleSheet.create({
   connectedText: { color: '#7CFD4D', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.4, marginBottom: 8 },
   offlineText: { color: '#F8D77A', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.1, marginBottom: 8 },
   publicBadge: { color: '#70C8FF', fontFamily: Fonts.mono, fontSize: 9, letterSpacing: 1.3, marginBottom: 7 },
+  publicRules: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 11, marginBottom: 8 },
   shareStatus: { color: '#9CB7A1', fontSize: 11, lineHeight: 16, fontFamily: Fonts.sans, textAlign: 'center', marginTop: 8, maxWidth: 280 },
   errorBox: { backgroundColor: 'rgba(220,38,38,0.14)', borderColor: 'rgba(220,38,38,0.5)', borderRadius: 12, borderWidth: 1, marginBottom: 20, padding: 12 },
   errorText: { color: '#FCA5A5', fontFamily: Fonts.sans, fontSize: 14 },

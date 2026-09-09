@@ -310,6 +310,30 @@ BEGIN
       AND room.host_id = auth.uid()::text
   ) INTO hosts_room;
 
+  -- A round-closing RPC may lock an autosaved draft without changing its
+  -- contents. Direct player updates are still constrained by RLS, and this
+  -- exception only applies after the round has stopped accepting answers.
+  IF OLD.submitted_at IS NULL
+    AND NEW.submitted_at IS NOT NULL
+    AND NEW.animal IS NOT DISTINCT FROM OLD.animal
+    AND NEW.name IS NOT DISTINCT FROM OLD.name
+    AND NEW.place IS NOT DISTINCT FROM OLD.place
+    AND NEW.thing IS NOT DISTINCT FROM OLD.thing
+    AND NEW.time_taken IS NOT DISTINCT FROM OLD.time_taken
+    AND NEW.animal_valid IS NOT DISTINCT FROM OLD.animal_valid
+    AND NEW.name_valid IS NOT DISTINCT FROM OLD.name_valid
+    AND NEW.place_valid IS NOT DISTINCT FROM OLD.place_valid
+    AND NEW.thing_valid IS NOT DISTINCT FROM OLD.thing_valid
+    AND NEW.points_earned IS NOT DISTINCT FROM OLD.points_earned
+    AND NEW.validated_at IS NOT DISTINCT FROM OLD.validated_at
+    AND EXISTS (
+      SELECT 1 FROM public.rounds AS round
+      WHERE round.id = OLD.round_id
+        AND round.status IN ('submitted', 'ended')
+    ) THEN
+    RETURN NEW;
+  END IF;
+
   IF owns_answer AND hosts_room THEN
     RETURN NEW;
   END IF;

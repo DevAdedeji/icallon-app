@@ -1,12 +1,13 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
 import { categoryPackName } from '@/features/game/category-packs';
 import { getDailyChallenge, type DailyChallenge } from '@/features/solo/solo-service';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function DailyScreen() {
   const insets = useSafeAreaInsets();

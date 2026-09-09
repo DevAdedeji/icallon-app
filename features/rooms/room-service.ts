@@ -36,6 +36,24 @@ type MatchmakingRow = CreateRoomRow & {
   matched_existing: boolean;
 };
 
+type PublicMatchRow = CreateRoomRow & {
+  category_pack: string;
+  host_name: string;
+  player_count: number;
+  max_players: number;
+  created_at: string;
+};
+
+export type PublicMatchRoom = {
+  roomId: string;
+  roomCode: string;
+  categoryPack: string;
+  hostName: string;
+  playerCount: number;
+  maxPlayers: number;
+  createdAt: string;
+};
+
 function roomError(error: unknown): Error {
   const message = error instanceof Error
     ? error.message
@@ -120,4 +138,38 @@ export async function joinPublicMatchmaking(categoryPack: string): Promise<RoomS
     isHost: data.is_host,
     matchedExisting: data.matched_existing,
   };
+}
+
+export async function listPublicMatchRooms(categoryPack: string): Promise<PublicMatchRoom[]> {
+  const { data, error } = await supabase.rpc('list_public_match_rooms', {
+    requested_category_pack: categoryPack,
+  });
+  if (error) throw roomError(error);
+  return ((data ?? []) as PublicMatchRow[]).map((room) => ({
+    roomId: room.room_id,
+    roomCode: room.room_code,
+    categoryPack: room.category_pack,
+    hostName: room.host_name,
+    playerCount: room.player_count,
+    maxPlayers: room.max_players,
+    createdAt: room.created_at,
+  }));
+}
+
+export async function createPublicMatchRoom(categoryPack: string): Promise<RoomSession> {
+  const { data, error } = await supabase
+    .rpc('create_public_match_room', { requested_category_pack: categoryPack })
+    .single<JoinRoomRow>();
+  if (error) throw roomError(error);
+  if (!data?.room_id || !data.room_code) throw new Error('Quick Match could not create a valid room.');
+  return { roomId: data.room_id, roomCode: data.room_code, isHost: data.is_host };
+}
+
+export async function joinPublicMatchRoom(roomId: string): Promise<RoomSession> {
+  const { data, error } = await supabase
+    .rpc('join_public_match_room', { requested_room_id: roomId })
+    .single<JoinRoomRow>();
+  if (error) throw roomError(error);
+  if (!data?.room_id || !data.room_code) throw new Error('Quick Match could not join this room.');
+  return { roomId: data.room_id, roomCode: data.room_code, isHost: data.is_host };
 }

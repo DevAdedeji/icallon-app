@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { completeOAuthCallback } from '@/lib/supabase/oauth';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function AuthCallback() {
   const url = Linking.useURL();

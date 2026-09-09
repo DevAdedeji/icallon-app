@@ -1,11 +1,12 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Fonts } from '@/constants/theme';
 import { useAuth } from '@/features/auth/auth-context';
 import { inviteCodeFromParam } from '@/features/rooms/room-invite';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function InviteScreen() {
   const { code } = useLocalSearchParams<{ code?: string | string[] }>();

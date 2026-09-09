@@ -118,6 +118,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS solo_results_daily_user_date_unique
   ON public.solo_results (user_id, challenge_date)
   WHERE mode = 'daily';
 
+-- Blitz solo mode can run five rounds (up to 200 points). Replace the original
+-- three-round bounds while keeping stored scores non-negative and finite.
+ALTER TABLE public.solo_results DROP CONSTRAINT IF EXISTS solo_results_player_score_valid;
+ALTER TABLE public.solo_results
+  ADD CONSTRAINT solo_results_player_score_valid CHECK (player_score BETWEEN 0 AND 200);
+ALTER TABLE public.solo_results DROP CONSTRAINT IF EXISTS solo_results_opponent_score_valid;
+ALTER TABLE public.solo_results
+  ADD CONSTRAINT solo_results_opponent_score_valid CHECK (opponent_score BETWEEN 0 AND 200);
+
 ALTER TABLE public.game_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.player_game_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.solo_results ENABLE ROW LEVEL SECURITY;
@@ -503,6 +512,180 @@ $$;
 REVOKE ALL ON FUNCTION public.join_public_matchmaking(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.join_public_matchmaking(text) TO authenticated;
 
+-- Public room browser. Only open rooms with capacity are exposed, and only to
+-- authenticated players. Clients receive display data, never host identifiers.
+CREATE OR REPLACE FUNCTION public.list_public_match_rooms(requested_category_pack text)
+RETURNS TABLE (
+  room_id text,
+  room_code text,
+  category_pack text,
+  host_name text,
+  player_count integer,
+  max_players integer,
+  created_at timestamp
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  normalized_pack text := lower(trim(requested_category_pack));
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+  IF normalized_pack NOT IN ('classic', 'world', 'food', 'entertainment') THEN
+    RAISE EXCEPTION 'Invalid category pack' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    room.id,
+    room.code,
+    room.category_pack,
+    host.username,
+    count(player.id)::integer,
+    room.max_players,
+    room.created_at
+  FROM public.rooms AS room
+  JOIN public.users AS host ON host.id = room.host_id
+  LEFT JOIN public.players AS player ON player.room_id = room.id
+  WHERE room.is_public
+    AND room.status = 'lobby'
+    AND room.category_pack = normalized_pack
+  GROUP BY room.id, room.code, room.category_pack, host.username,
+    room.max_players, room.created_at
+  HAVING count(player.id) < room.max_players
+  ORDER BY room.created_at ASC, room.id ASC
+  LIMIT 30;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.list_public_match_rooms(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_public_match_rooms(text) TO authenticated;
+
+-- Create is separate from join so the player explicitly chooses whether to
+-- host a public game instead of being silently assigned to a random lobby.
+CREATE OR REPLACE FUNCTION public.create_public_match_room(requested_category_pack text)
+RETURNS TABLE (room_id text, room_code text, player_id text, is_host boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  normalized_pack text := lower(trim(requested_category_pack));
+  labels jsonb;
+  created_room record;
+  created_player_id text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+  IF normalized_pack NOT IN ('classic', 'world', 'food', 'entertainment') THEN
+    RAISE EXCEPTION 'Invalid category pack' USING ERRCODE = '22023';
+  END IF;
+
+  labels := CASE normalized_pack
+    WHEN 'world' THEN '["Country", "City", "Landmark", "Language"]'::jsonb
+    WHEN 'food' THEN '["Food", "Drink", "Ingredient", "Restaurant"]'::jsonb
+    WHEN 'entertainment' THEN '["Movie", "Song", "Celebrity", "Character"]'::jsonb
+    ELSE '["Name", "Animal", "Place", "Thing"]'::jsonb
+  END;
+
+  SELECT created.room_id, created.room_code, created.is_host
+  INTO created_room
+  FROM public.create_game_room_v2(3, 60, normalized_pack, labels) AS created;
+
+  UPDATE public.rooms AS room
+  SET is_public = true, max_players = 4
+  WHERE room.id = created_room.room_id;
+
+  SELECT player.id INTO created_player_id
+  FROM public.players AS player
+  WHERE player.room_id = created_room.room_id
+    AND player.user_id = auth.uid()::text;
+
+  RETURN QUERY
+    SELECT created_room.room_id::text, created_room.room_code::text,
+      created_player_id, true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_public_match_room(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_public_match_room(text) TO authenticated;
+
+-- Join an explicitly selected public room. The row lock makes the capacity
+-- check safe when several players tap the same room at once.
+CREATE OR REPLACE FUNCTION public.join_public_match_room(requested_room_id text)
+RETURNS TABLE (room_id text, room_code text, player_id text, is_host boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  room_record public.rooms%ROWTYPE;
+  profile_name text;
+  participant_count integer;
+  joined_player_id text;
+  joined_is_host boolean;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT room.* INTO room_record
+  FROM public.rooms AS room
+  WHERE room.id = requested_room_id
+  FOR UPDATE;
+
+  IF room_record.id IS NULL OR NOT room_record.is_public THEN
+    RAISE EXCEPTION 'Public room not found' USING ERRCODE = 'P0002';
+  END IF;
+  IF room_record.status <> 'lobby' THEN
+    RAISE EXCEPTION 'This match has already started' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT count(*)::integer INTO participant_count
+  FROM public.players AS player
+  WHERE player.room_id = room_record.id;
+
+  IF participant_count >= room_record.max_players
+    AND NOT EXISTS (
+      SELECT 1 FROM public.players AS player
+      WHERE player.room_id = room_record.id AND player.user_id = caller_id::text
+    ) THEN
+    RAISE EXCEPTION 'Room is full' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT profile.username INTO profile_name
+  FROM public.users AS profile
+  WHERE profile.id = caller_id::text;
+  IF profile_name IS NULL THEN
+    RAISE EXCEPTION 'Player profile not found' USING ERRCODE = '23503';
+  END IF;
+
+  INSERT INTO public.players (
+    id, room_id, user_id, display_name, is_host, total_score, is_connected
+  ) VALUES (
+    gen_random_uuid()::text, room_record.id, caller_id::text,
+    profile_name, room_record.host_id = caller_id::text, 0, true
+  )
+  ON CONFLICT ON CONSTRAINT unique_player_per_room
+  DO UPDATE SET is_connected = true, last_seen_at = now()
+  RETURNING players.id, players.is_host
+  INTO joined_player_id, joined_is_host;
+
+  RETURN QUERY
+    SELECT room_record.id, room_record.code, joined_player_id, joined_is_host;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.join_public_match_room(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.join_public_match_room(text) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_my_active_room()
 RETURNS TABLE (
   room_id text,
@@ -651,6 +834,23 @@ BEGIN
   END IF;
   IF room_record.status <> 'playing' THEN
     RAISE EXCEPTION 'The game is not active' USING ERRCODE = '55000';
+  END IF;
+
+  -- Public matches draw the letter on the server so the room creator cannot
+  -- choose a letter that gives them an advantage.
+  IF room_record.is_public THEN
+    SELECT candidate.letter INTO normalized_letter
+    FROM (
+      SELECT substr('ABCDEFGHIJKLMNOPQRSTUVWXYZ', position, 1) AS letter
+      FROM generate_series(1, 26) AS position
+    ) AS candidate
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.rounds AS previous
+      WHERE previous.room_id = requested_room_id
+        AND previous.letter = candidate.letter
+    )
+    ORDER BY random()
+    LIMIT 1;
   END IF;
 
   IF room_record.current_round_id IS NOT NULL THEN
@@ -886,6 +1086,14 @@ BEGIN
   SET status = 'submitted', ended_at = COALESCE(ended_at, now())
   WHERE id = requested_round_id AND status = 'active';
 
+  -- Closing a round locks in every autosaved draft. This happens only after
+  -- the round is closed, which lets the answer-integrity trigger distinguish
+  -- server lock-in from an attempt to rewrite another player's live draft.
+  UPDATE public.answers AS answer
+  SET submitted_at = now(), updated_at = now()
+  WHERE answer.round_id = requested_round_id
+    AND answer.submitted_at IS NULL;
+
   -- Letter-matching submitted answers are the sensible default. The host can
   -- still reject nonsense or correct an edge case during review.
   UPDATE public.answers AS answer
@@ -907,6 +1115,27 @@ BEGIN
   WHERE answer.round_id = requested_round_id;
 
   PERFORM public.recalculate_game_round_scores(requested_round_id);
+
+  -- Quick Match has no player referee. The server's deterministic letter and
+  -- duplicate rules finalize the round immediately, avoiding host bias and a
+  -- stalled match when the creator backgrounds the app.
+  IF room_record.is_public THEN
+    UPDATE public.players AS player
+    SET total_score = COALESCE((
+      SELECT sum(answer.points_earned)
+      FROM public.answers AS answer
+      WHERE answer.room_id = round_record.room_id
+        AND answer.player_id = player.id
+    ), 0)
+    WHERE player.room_id = round_record.room_id;
+
+    UPDATE public.rounds
+    SET status = 'ended', ended_at = COALESCE(ended_at, now())
+    WHERE id = requested_round_id;
+
+    RETURN QUERY SELECT requested_round_id, 'ended'::text;
+    RETURN;
+  END IF;
 
   RETURN QUERY SELECT requested_round_id, 'submitted'::text;
 END;
@@ -1222,8 +1451,8 @@ BEGIN
   IF normalized_mode NOT IN ('solo', 'daily')
     OR requested_difficulty NOT IN ('easy', 'medium', 'hard')
     OR requested_category_pack NOT IN ('classic', 'world', 'food', 'entertainment')
-    OR requested_player_score NOT BETWEEN 0 AND 120
-    OR requested_opponent_score NOT BETWEEN 0 AND 120 THEN
+    OR requested_player_score NOT BETWEEN 0 AND 200
+    OR requested_opponent_score NOT BETWEEN 0 AND 200 THEN
     RAISE EXCEPTION 'Invalid solo result' USING ERRCODE = '22023';
   END IF;
   IF (normalized_mode = 'daily') <> (requested_challenge_date IS NOT NULL) THEN

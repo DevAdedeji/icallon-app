@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -7,6 +7,7 @@ import { Fonts } from '@/constants/theme';
 import { createRoomSession } from '@/features/rooms/room-service';
 import { ROUND_OPTIONS, TIMER_OPTIONS } from '@/features/rooms/room-validation';
 import { CATEGORY_PACKS, DEFAULT_CATEGORY_LABELS, type CategoryPackId } from '@/features/game/category-packs';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function CreateRoomScreen() {
   const insets = useSafeAreaInsets();

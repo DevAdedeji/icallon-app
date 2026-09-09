@@ -2,6 +2,18 @@ import type { AnswerValues } from '@/lib/game';
 import type { CategoryPackId } from '@/features/game/category-packs';
 
 export type SoloDifficulty = 'easy' | 'medium' | 'hard';
+export type SoloModeRules = {
+  label: string;
+  detail: string;
+  roundCount: number;
+  secondsPerRound: number;
+};
+
+export const SOLO_MODE_RULES: Record<SoloDifficulty, SoloModeRules> = {
+  easy: { label: 'Relaxed', detail: '3 rounds · 90 seconds each', roundCount: 3, secondsPerRound: 90 },
+  medium: { label: 'Classic', detail: '4 rounds · 60 seconds each', roundCount: 4, secondsPerRound: 60 },
+  hard: { label: 'Blitz', detail: '5 rounds · 40 seconds each', roundCount: 5, secondsPerRound: 40 },
+};
 export type SoloRoundScore = {
   playerPoints: number;
   opponentPoints: number;
@@ -71,20 +83,13 @@ export function soloLetters(pack: Exclude<CategoryPackId, 'custom'>, seed: strin
 export function computerAnswers(
   pack: Exclude<CategoryPackId, 'custom'>,
   letter: string,
-  difficulty: SoloDifficulty,
-  seed: string,
 ): AnswerValues {
   const row = ANSWERS[pack][letter] ?? ['', '', '', ''];
-  const answerCount = difficulty === 'easy' ? 2 : difficulty === 'medium' ? 3 : 4;
-  const order = KEYS
-    .map((key, index) => ({ key, index, rank: seededNumber(`${seed}:${letter}:${key}`) }))
-    .sort((left, right) => left.rank - right.rank);
-  const enabled = new Set(order.slice(0, answerCount).map((item) => item.index));
   return {
-    name: enabled.has(0) ? row[0] : '',
-    animal: enabled.has(1) ? row[1] : '',
-    place: enabled.has(2) ? row[2] : '',
-    thing: enabled.has(3) ? row[3] : '',
+    name: row[0],
+    animal: row[1],
+    place: row[2],
+    thing: row[3],
   };
 }
 
