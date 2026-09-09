@@ -35,6 +35,21 @@ BEGIN
   IF (SELECT count(*) FROM public.players WHERE room_id = created_room_id) <> 2 THEN
     RAISE EXCEPTION 'Reconnect created a duplicate player';
   END IF;
+  IF (SELECT active.room_id FROM public.get_my_active_room() AS active) <> created_room_id THEN
+    RAISE EXCEPTION 'Active room lookup did not restore the joined lobby';
+  END IF;
+
+  PERFORM * FROM public.set_room_presence(created_room_id, false);
+  IF (SELECT is_connected FROM public.players WHERE id = joined_player_id) THEN
+    RAISE EXCEPTION 'Player presence was not marked offline';
+  END IF;
+  IF NOT (
+    SELECT is_connected FROM public.players
+    WHERE room_id = created_room_id AND is_host
+  ) THEN
+    RAISE EXCEPTION 'A player presence update changed another participant';
+  END IF;
+  PERFORM * FROM public.set_room_presence(created_room_id, true);
 
   BEGIN
     PERFORM * FROM public.start_game(created_room_id);
@@ -201,6 +216,11 @@ BEGIN
   END IF;
   IF (SELECT count(*) FROM public.game_results WHERE room_id = created_room_id) <> 1 THEN
     RAISE EXCEPTION 'Rematch removed completed game history';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  IF (SELECT active.room_status FROM public.get_my_active_room() AS active) <> 'lobby' THEN
+    RAISE EXCEPTION 'Rematch lobby was not available for session resume';
   END IF;
 END;
 $$;

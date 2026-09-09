@@ -43,6 +43,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS answers_player_round_unique
 ALTER TABLE public.rooms
   ADD COLUMN IF NOT EXISTS game_number integer NOT NULL DEFAULT 1;
 
+ALTER TABLE public.players
+  ADD COLUMN IF NOT EXISTS last_seen_at timestamp NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS public.game_results (
   id text PRIMARY KEY,
   room_id text NOT NULL,
@@ -243,7 +246,7 @@ BEGIN
     true
   )
   ON CONFLICT ON CONSTRAINT unique_player_per_room
-  DO UPDATE SET is_connected = true
+  DO UPDATE SET is_connected = true, last_seen_at = now()
   RETURNING players.id, players.is_host
   INTO joined_player_id, joined_is_host;
 
@@ -254,6 +257,87 @@ $$;
 
 REVOKE ALL ON FUNCTION public.join_game_room(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.join_game_room(text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_my_active_room()
+RETURNS TABLE (
+  room_id text,
+  room_code text,
+  room_status text,
+  is_host boolean,
+  current_round integer,
+  current_round_id text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    room.id,
+    room.code,
+    room.status,
+    player.is_host,
+    room.current_round,
+    room.current_round_id
+  FROM public.players AS player
+  JOIN public.rooms AS room ON room.id = player.room_id
+  WHERE player.user_id = caller_id::text
+    AND room.status IN ('lobby', 'playing')
+  ORDER BY room.created_at DESC, room.id DESC
+  LIMIT 1;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_my_active_room() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_my_active_room() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.set_room_presence(
+  requested_room_id text,
+  requested_connected boolean
+)
+RETURNS TABLE (player_id text, is_connected boolean, last_seen_at timestamp)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  updated_player_id text;
+  updated_connected boolean;
+  updated_last_seen_at timestamp;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.players AS player
+  SET is_connected = requested_connected, last_seen_at = now()
+  FROM public.rooms AS room
+  WHERE player.room_id = requested_room_id
+    AND player.user_id = caller_id::text
+    AND room.id = player.room_id
+    AND room.status IN ('lobby', 'playing')
+  RETURNING player.id, player.is_connected, player.last_seen_at
+  INTO updated_player_id, updated_connected, updated_last_seen_at;
+
+  IF updated_player_id IS NULL THEN
+    RAISE EXCEPTION 'No active room membership found' USING ERRCODE = 'P0002';
+  END IF;
+
+  RETURN QUERY SELECT updated_player_id, updated_connected, updated_last_seen_at;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.set_room_presence(text, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.set_room_presence(text, boolean) TO authenticated;
 
 -- Host-only state transition from lobby to gameplay.
 CREATE OR REPLACE FUNCTION public.start_game(requested_room_id text)

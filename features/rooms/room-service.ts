@@ -7,6 +7,12 @@ export type RoomSession = {
   isHost: boolean;
 };
 
+export type ActiveRoomSession = RoomSession & {
+  status: 'lobby' | 'playing';
+  currentRound: number;
+  currentRoundId: string | null;
+};
+
 type CreateRoomRow = {
   room_id: string;
   room_code: string;
@@ -14,6 +20,15 @@ type CreateRoomRow = {
 
 type JoinRoomRow = CreateRoomRow & {
   is_host: boolean;
+};
+
+type ActiveRoomRow = {
+  room_id: string;
+  room_code: string;
+  room_status: 'lobby' | 'playing';
+  is_host: boolean;
+  current_round: number;
+  current_round_id: string | null;
 };
 
 function roomError(error: unknown): Error {
@@ -62,4 +77,26 @@ export async function joinRoomSession(code: string): Promise<RoomSession> {
   if (error) throw roomError(error);
   if (!data?.room_id || !data.room_code) throw new Error('The room was joined without a valid session.');
   return { roomId: data.room_id, roomCode: data.room_code, isHost: data.is_host };
+}
+
+export async function getActiveRoomSession(): Promise<ActiveRoomSession | null> {
+  const { data, error } = await supabase.rpc('get_my_active_room').maybeSingle<ActiveRoomRow>();
+  if (error) throw roomError(error);
+  if (!data) return null;
+  return {
+    roomId: data.room_id,
+    roomCode: data.room_code,
+    isHost: data.is_host,
+    status: data.room_status,
+    currentRound: data.current_round,
+    currentRoundId: data.current_round_id,
+  };
+}
+
+export async function setRoomPresence(roomId: string, connected: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_room_presence', {
+    requested_room_id: roomId,
+    requested_connected: connected,
+  });
+  if (error) throw roomError(error);
 }

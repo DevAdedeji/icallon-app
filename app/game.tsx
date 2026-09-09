@@ -19,6 +19,7 @@ import {
 } from '@/features/game/game-service';
 import { supabase } from '@/lib/supabase/client';
 import { AnswerValues, CATEGORIES, EMPTY_ANSWERS, GameAnswer, getPlayer, Player, Room, Round } from '@/lib/game';
+import { useRoomPresence } from '@/features/rooms/use-room-presence';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -74,6 +75,8 @@ export default function GameScreen() {
       setLoading(false);
     }
   }, [roomId, session?.user.id]);
+
+  useRoomPresence(roomId, loadGame);
 
   useEffect(() => { loadGame(); }, [loadGame]);
 
