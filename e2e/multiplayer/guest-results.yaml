@@ -1,0 +1,11 @@
+appId: com.anonymous.icallon
+name: Guest receives final leaderboard
+---
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "leaderboard"
+    timeout: 30000
+- assertVisible: ${GUEST_USERNAME}
+- assertVisible: "120"

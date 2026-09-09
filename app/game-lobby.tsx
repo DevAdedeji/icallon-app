@@ -35,13 +35,13 @@ export default function GameLobbyScreen() {
       <Text style={styles.kicker}>READY TO PLAY</Text>
       <Text style={styles.title}>Hey, {name}.</Text>
       <Text style={styles.subtitle}>Start a new word battle or enter a friend’s room code.</Text>
-      <Pressable style={styles.primaryButton} onPress={() => router.push('/create-room')}>
+      <Pressable accessibilityRole="button" testID="home-create-room" style={styles.primaryButton} onPress={() => router.push('/create-room')}>
         <Text style={styles.primaryText}>Create Room</Text>
       </Pressable>
-      <Pressable style={styles.button} onPress={() => router.push('/join-room')}>
+      <Pressable accessibilityRole="button" testID="home-join-room" style={styles.button} onPress={() => router.push('/join-room')}>
         <Text style={styles.buttonText}>Join Room</Text>
       </Pressable>
-      <Pressable style={styles.signOutButton} onPress={signOut}>
+      <Pressable accessibilityRole="button" testID="home-sign-out" style={styles.signOutButton} onPress={signOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
     </View>
