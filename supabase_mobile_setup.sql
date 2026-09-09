@@ -449,6 +449,66 @@ $$;
 REVOKE ALL ON FUNCTION public.save_game_answers(text, text, text, text, text, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.save_game_answers(text, text, text, text, text, text, boolean) TO authenticated;
 
+-- Recalculate an entire round because changing one duplicate can change the
+-- value of another player's otherwise-identical answer.
+CREATE OR REPLACE FUNCTION public.recalculate_game_round_scores(requested_round_id text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.answers AS answer
+  SET
+    points_earned = CASE WHEN answer.submitted_at IS NULL THEN 0 ELSE
+      (CASE WHEN answer.name_valid THEN
+        CASE WHEN (
+          SELECT count(*) FROM public.answers AS other
+          WHERE other.round_id = answer.round_id
+            AND other.submitted_at IS NOT NULL
+            AND other.name_valid
+            AND lower(regexp_replace(trim(other.name), '[[:space:]]+', ' ', 'g')) =
+              lower(regexp_replace(trim(answer.name), '[[:space:]]+', ' ', 'g'))
+        ) > 1 THEN 5 ELSE 10 END
+      ELSE 0 END) +
+      (CASE WHEN answer.animal_valid THEN
+        CASE WHEN (
+          SELECT count(*) FROM public.answers AS other
+          WHERE other.round_id = answer.round_id
+            AND other.submitted_at IS NOT NULL
+            AND other.animal_valid
+            AND lower(regexp_replace(trim(other.animal), '[[:space:]]+', ' ', 'g')) =
+              lower(regexp_replace(trim(answer.animal), '[[:space:]]+', ' ', 'g'))
+        ) > 1 THEN 5 ELSE 10 END
+      ELSE 0 END) +
+      (CASE WHEN answer.place_valid THEN
+        CASE WHEN (
+          SELECT count(*) FROM public.answers AS other
+          WHERE other.round_id = answer.round_id
+            AND other.submitted_at IS NOT NULL
+            AND other.place_valid
+            AND lower(regexp_replace(trim(other.place), '[[:space:]]+', ' ', 'g')) =
+              lower(regexp_replace(trim(answer.place), '[[:space:]]+', ' ', 'g'))
+        ) > 1 THEN 5 ELSE 10 END
+      ELSE 0 END) +
+      (CASE WHEN answer.thing_valid THEN
+        CASE WHEN (
+          SELECT count(*) FROM public.answers AS other
+          WHERE other.round_id = answer.round_id
+            AND other.submitted_at IS NOT NULL
+            AND other.thing_valid
+            AND lower(regexp_replace(trim(other.thing), '[[:space:]]+', ' ', 'g')) =
+              lower(regexp_replace(trim(answer.thing), '[[:space:]]+', ' ', 'g'))
+        ) > 1 THEN 5 ELSE 10 END
+      ELSE 0 END)
+    END,
+    updated_at = now()
+  WHERE answer.round_id = requested_round_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.recalculate_game_round_scores(text) FROM PUBLIC;
+
 -- The host may close early. Any joined player may close an expired round so a
 -- backgrounded or disconnected host cannot leave everyone stuck indefinitely.
 CREATE OR REPLACE FUNCTION public.close_game_submissions(requested_round_id text)
@@ -496,6 +556,28 @@ BEGIN
   UPDATE public.rounds
   SET status = 'submitted', ended_at = COALESCE(ended_at, now())
   WHERE id = requested_round_id AND status = 'active';
+
+  -- Letter-matching submitted answers are the sensible default. The host can
+  -- still reject nonsense or correct an edge case during review.
+  UPDATE public.answers AS answer
+  SET
+    name_valid = answer.submitted_at IS NOT NULL
+      AND answer.name IS NOT NULL
+      AND upper(left(trim(answer.name), 1)) = upper(round_record.letter),
+    animal_valid = answer.submitted_at IS NOT NULL
+      AND answer.animal IS NOT NULL
+      AND upper(left(trim(answer.animal), 1)) = upper(round_record.letter),
+    place_valid = answer.submitted_at IS NOT NULL
+      AND answer.place IS NOT NULL
+      AND upper(left(trim(answer.place), 1)) = upper(round_record.letter),
+    thing_valid = answer.submitted_at IS NOT NULL
+      AND answer.thing IS NOT NULL
+      AND upper(left(trim(answer.thing), 1)) = upper(round_record.letter),
+    validated_at = CASE WHEN answer.submitted_at IS NOT NULL THEN now() ELSE answer.validated_at END,
+    updated_at = now()
+  WHERE answer.round_id = requested_round_id;
+
+  PERFORM public.recalculate_game_round_scores(requested_round_id);
 
   RETURN QUERY SELECT requested_round_id, 'submitted'::text;
 END;
@@ -547,6 +629,9 @@ BEGIN
   IF room_host_id IS NULL OR room_host_id <> caller_id::text THEN
     RAISE EXCEPTION 'Only the host can score submitted answers' USING ERRCODE = '42501';
   END IF;
+  IF answer_record.submitted_at IS NULL THEN
+    RAISE EXCEPTION 'Only submitted answers can be scored' USING ERRCODE = '55000';
+  END IF;
 
   UPDATE public.answers AS answer
   SET
@@ -556,17 +641,13 @@ BEGIN
     thing_valid = CASE WHEN requested_category = 'thing' THEN requested_valid ELSE answer.thing_valid END,
     validated_at = now(),
     updated_at = now()
-  WHERE answer.id = requested_answer_id
-  RETURNING (
-    (CASE WHEN answer.name_valid THEN 10 ELSE 0 END) +
-    (CASE WHEN answer.animal_valid THEN 10 ELSE 0 END) +
-    (CASE WHEN answer.place_valid THEN 10 ELSE 0 END) +
-    (CASE WHEN answer.thing_valid THEN 10 ELSE 0 END)
-  ) INTO calculated_points;
+  WHERE answer.id = requested_answer_id;
 
-  UPDATE public.answers
-  SET points_earned = calculated_points
-  WHERE id = requested_answer_id;
+  PERFORM public.recalculate_game_round_scores(answer_record.round_id);
+
+  SELECT answer.points_earned INTO calculated_points
+  FROM public.answers AS answer
+  WHERE answer.id = requested_answer_id;
 
   RETURN QUERY SELECT requested_answer_id, calculated_points;
 END;

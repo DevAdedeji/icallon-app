@@ -40,3 +40,25 @@ export function remainingRoundSeconds(startedAt: string, durationSeconds: number
   if (!Number.isFinite(finishAt)) return 0;
   return Math.max(0, Math.ceil((finishAt - now) / 1000));
 }
+
+export function duplicateAnswerKeys(answers: GameAnswer[]): Set<string> {
+  const occurrences = new Map<string, string[]>();
+
+  for (const answer of answers) {
+    for (const category of ['name', 'animal', 'place', 'thing'] as const) {
+      if (answer[`${category}_valid`] !== true) continue;
+      const normalized = answer[category].trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+      if (!normalized) continue;
+      const key = `${category}:${normalized}`;
+      occurrences.set(key, [...(occurrences.get(key) ?? []), answer.id]);
+    }
+  }
+
+  const duplicates = new Set<string>();
+  for (const [valueKey, answerIds] of occurrences) {
+    if (answerIds.length < 2) continue;
+    const category = valueKey.slice(0, valueKey.indexOf(':'));
+    for (const answerId of answerIds) duplicates.add(`${answerId}:${category}`);
+  }
+  return duplicates;
+}

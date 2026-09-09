@@ -1,4 +1,4 @@
-import { applyAnswerScore, databaseTimestampMs, remainingRoundSeconds } from '@/features/game/game-state';
+import { applyAnswerScore, databaseTimestampMs, duplicateAnswerKeys, remainingRoundSeconds } from '@/features/game/game-state';
 import type { GameAnswer } from '@/lib/game';
 
 const answer: GameAnswer = {
@@ -42,5 +42,28 @@ describe('game state helpers', () => {
       animal_valid: true,
       points_earned: 10,
     });
+  });
+
+  it('finds valid duplicates without being affected by case or extra spaces', () => {
+    const second: GameAnswer = {
+      ...answer,
+      id: 'answer-2',
+      player_id: 'player-2',
+      player_name: 'Bola',
+      animal: '  ANT ',
+      animal_valid: true,
+    };
+    const first = { ...answer, animal_valid: true };
+
+    expect(duplicateAnswerKeys([first, second])).toEqual(new Set([
+      'answer-1:animal',
+      'answer-2:animal',
+    ]));
+  });
+
+  it('does not mark rejected matching answers as duplicates', () => {
+    const rejected = { ...answer, id: 'answer-2', animal_valid: false };
+    const accepted = { ...answer, animal_valid: true };
+    expect(duplicateAnswerKeys([accepted, rejected])).toEqual(new Set());
   });
 });
