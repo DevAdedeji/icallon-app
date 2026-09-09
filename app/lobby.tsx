@@ -86,8 +86,11 @@ export default function LobbyScreen() {
 
     void initialize();
 
+    // RealtimeClient reuses channels by topic. A unique mount suffix avoids
+    // attaching callbacks to a channel whose asynchronous cleanup is pending.
+    const channelTopic = `room-${roomId}-players-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`room-${roomId}-players`)
+      .channel(channelTopic)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` },

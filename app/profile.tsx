@@ -60,7 +60,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.screen}>
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to home" onPress={() => router.back()} style={styles.backButton}>
+        <Pressable testID="profile-back" accessibilityRole="button" accessibilityLabel="Back to home" onPress={() => router.back()} style={styles.backButton}>
           <AntDesign name="arrow-left" size={20} color="#CFE7D4" />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
@@ -74,7 +74,7 @@ export default function ProfileScreen() {
         }} />}
       >
         <Text style={styles.kicker}>PLAYER PROFILE</Text>
-        <Text testID="profile-username" style={styles.title}>{username}</Text>
+        <Text testID="profile-username" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55} style={styles.title}>{username}</Text>
         <Text style={styles.subtitle}>Your ICallOn record, built one battle at a time.</Text>
 
         {loading ? (

@@ -32,7 +32,8 @@ name: Host starts an instant rematch
       id: "profile-history"
     timeout: 15000
 - assertVisible: "Games: 1"
-- tapOn: "Back"
+- tapOn:
+    id: "profile-back"
 - tapOn:
     id: "home-resume-room"
 - extendedWaitUntil:

@@ -120,7 +120,10 @@ export default function GameScreen() {
     if (!roomId) return;
     let active = true;
 
-    const channel = supabase.channel(`mobile-game-${roomId}`)
+    // Route transitions can remount before removeChannel finishes. Supabase
+    // reuses identical topics, so every mount needs its own subscription key.
+    const channelTopic = `mobile-game-${roomId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const channel = supabase.channel(channelTopic)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => {
         if (active) void loadGame();
       })
