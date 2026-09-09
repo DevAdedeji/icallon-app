@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
 import { ensurePlayerProfile } from '@/features/auth/profile';
+import { inviteCodeFromParam } from '@/features/rooms/room-invite';
 import { signUpSchema, type SignUpFormInputs } from '@/schemas/auth';
 import { supabase } from '@/lib/supabase/client';
 import { getAuthRedirectUrl, signInWithGoogle } from '@/lib/supabase/oauth';
 
 export default function SignupScreen() {
+  const { returnTo, roomCode } = useLocalSearchParams<{ returnTo?: string; roomCode?: string | string[] }>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -21,6 +23,10 @@ export default function SignupScreen() {
     resolver: zodResolver(signUpSchema),
     defaultValues: { email: '', password: '', username: '' },
   });
+  const invitedCode = inviteCodeFromParam(roomCode);
+  const destination = returnTo === '/join-room' && invitedCode
+    ? { pathname: '/join-room' as const, params: { code: invitedCode } }
+    : '/game-lobby' as const;
 
   const onSubmit = async (data: SignUpFormInputs) => {
     setError(null);
@@ -42,13 +48,17 @@ export default function SignupScreen() {
 
       if (signUpData.session && signUpData.user) {
         await ensurePlayerProfile(signUpData.user);
-        router.replace('/game-lobby');
+        router.replace(destination);
         return;
       }
 
       router.replace({
         pathname: '/login',
-        params: { notice: 'Check your email to confirm your account, then log in.' },
+        params: {
+          notice: 'Check your email to confirm your account, then log in.',
+          returnTo: invitedCode ? '/join-room' : '/game-lobby',
+          roomCode: invitedCode ?? '',
+        },
       });
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'An unexpected error occurred');
@@ -65,7 +75,7 @@ export default function SignupScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Google sign-in succeeded without a user session.');
       await ensurePlayerProfile(user);
-      router.replace('/game-lobby');
+      router.replace(destination);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Google sign-up failed');
     } finally {
@@ -210,7 +220,11 @@ export default function SignupScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Already have an account? </Text>
-        <Pressable testID="signup-login-link" onPress={() => router.push('/login')} disabled={loading}>
+        <Pressable
+          testID="signup-login-link"
+          onPress={() => router.push({ pathname: '/login', params: { returnTo: invitedCode ? '/join-room' : '/game-lobby', roomCode: invitedCode ?? '' } })}
+          disabled={loading}
+        >
           <Text style={[styles.footerLink, loading && styles.disabledLink]}>Login</Text>
         </Pressable>
           </View>

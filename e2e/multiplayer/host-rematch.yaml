@@ -15,3 +15,27 @@ name: Host starts an instant rematch
 - assertVisible: ${GUEST_USERNAME}
 - assertVisible:
     id: "start-game-button"
+- openLink: "icallon://game-lobby"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "home-profile"
+    timeout: 15000
+- tapOn:
+    id: "home-profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile-history"
+    timeout: 15000
+- assertVisible: "Games: 1"
+- tapOn: "Back"
+- tapOn:
+    id: "home-resume-room"
+- extendedWaitUntil:
+    visible: "GAME LOBBY"
+    timeout: 15000
+- assertVisible: ${ROOM_CODE}

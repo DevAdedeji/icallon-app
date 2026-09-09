@@ -65,12 +65,16 @@ name: Multiplayer guest setup
 - extendedWaitUntil:
     visible: "Hey, ${GUEST_USERNAME}."
     timeout: 30000
-- tapOn:
-    id: "home-join-room"
-- tapOn:
-    id: "room-code-input"
-- inputText: ${ROOM_CODE}
-- tapOn: "Enter the 6-character room code shared by the host."
+- openLink: "icallon://invite?code=${ROOM_CODE}"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible: "INVITE READY"
+    timeout: 15000
+- assertVisible: ${ROOM_CODE}
 - tapOn:
     id: "join-room-submit"
 - extendedWaitUntil:

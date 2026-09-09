@@ -41,6 +41,7 @@ function RootNavigator() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="welcome" />
+        <Stack.Screen name="invite" />
         <Stack.Screen name="auth/callback" />
 
         <Stack.Protected guard={!session}>

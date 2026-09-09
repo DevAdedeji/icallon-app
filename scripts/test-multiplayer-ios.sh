@@ -190,4 +190,4 @@ fi
 
 xcrun simctl io "${host_device}" screenshot "${artifact_root}/host-rematch-lobby.png"
 xcrun simctl io "${guest_device}" screenshot "${artifact_root}/guest-rematch-lobby.png"
-echo "Three-round, two-device multiplayer and instant rematch flow passed."
+echo "Two-device multiplayer, scoring, history, invitations, reconnect, and rematch flow passed."
