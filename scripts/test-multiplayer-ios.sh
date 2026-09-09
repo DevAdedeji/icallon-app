@@ -123,10 +123,30 @@ common_guest=(
 run_flow "${host_device}" e2e/multiplayer/host-setup.yaml \
   -e "DEV_CLIENT_URL=${dev_client_url}" "${common_host[@]}"
 
-hierarchy="$(MAESTRO_CLI_NO_ANALYTICS=1 "${maestro_bin}" --device "${host_device}" hierarchy --compact)"
-room_code="$(printf '%s\n' "${hierarchy}" | sed -n 's/.*accessibilityText=\([A-HJ-NP-Z2-9][A-HJ-NP-Z2-9]*\);.*resource-id=room-code.*/\1/p' | head -1)"
+host_auth_response="$(curl -fsS --retry 4 --retry-all-errors --connect-timeout 10 \
+  "${project_url}/auth/v1/token?grant_type=password" \
+  -H "apikey: ${public_key}" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -nc --arg email "${E2E_HOST_EMAIL}" --arg password "${E2E_TEST_PASSWORD}" \
+    '{email: $email, password: $password}')")"
+host_access_token="$(printf '%s' "${host_auth_response}" | jq -r '.access_token // empty')"
+host_user_id="$(printf '%s' "${host_auth_response}" | jq -r '.user.id // empty')"
+if [[ -z "${host_access_token}" || -z "${host_user_id}" ]]; then
+  echo "Could not authenticate the host account for room-code lookup." >&2
+  exit 1
+fi
+
+room_code="$(curl -fsS --retry 4 --retry-all-errors --connect-timeout 10 --get \
+  "${project_url}/rest/v1/rooms" \
+  -H "apikey: ${public_key}" \
+  -H "Authorization: Bearer ${host_access_token}" \
+  --data-urlencode "select=code" \
+  --data-urlencode "host_id=eq.${host_user_id}" \
+  --data-urlencode "status=eq.lobby" \
+  --data-urlencode "order=created_at.desc" \
+  --data-urlencode "limit=1" | jq -r '.[0].code // empty')"
 if [[ ! "${room_code}" =~ ^[A-HJ-NP-Z2-9]{6}$ ]]; then
-  echo "Could not read the room code from the host simulator." >&2
+  echo "Could not read the host's latest lobby room code." >&2
   exit 1
 fi
 
