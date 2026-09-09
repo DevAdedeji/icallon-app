@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand --no-watchman",
     "test:watch": "jest --watch --no-watchman",
+    "test:database": "bash scripts/test-database.sh",
     "e2e:ios": "maestro test e2e",
     "verify": "npm run lint && npm run typecheck && npm test"
   },

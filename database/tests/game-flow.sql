@@ -1,0 +1,130 @@
+INSERT INTO public.users (id, email, username) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'host@example.test', 'Host'),
+  ('22222222-2222-2222-2222-222222222222', 'player@example.test', 'Player');
+
+DO $$
+DECLARE
+  created_room_id text;
+  created_room_code text;
+  created_round_id text;
+  joined_player_id text;
+  player_answer_id text;
+  returned_points integer;
+BEGIN
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', false);
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+
+  SELECT result.room_id, result.room_code
+  INTO created_room_id, created_room_code
+  FROM public.create_game_room(3, 30) AS result;
+
+  IF (SELECT count(*) FROM public.players WHERE room_id = created_room_id AND is_host) <> 1 THEN
+    RAISE EXCEPTION 'Host player was not created atomically';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  SELECT result.player_id INTO joined_player_id
+  FROM public.join_game_room(created_room_code) AS result;
+
+  IF joined_player_id IS NULL THEN
+    RAISE EXCEPTION 'Player did not join the room';
+  END IF;
+
+  -- Joining twice must reconnect the same player instead of duplicating it.
+  PERFORM * FROM public.join_game_room(created_room_code);
+  IF (SELECT count(*) FROM public.players WHERE room_id = created_room_id) <> 2 THEN
+    RAISE EXCEPTION 'Reconnect created a duplicate player';
+  END IF;
+
+  BEGIN
+    PERFORM * FROM public.start_game(created_room_id);
+    RAISE EXCEPTION 'A non-host unexpectedly started the game';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  PERFORM * FROM public.start_game(created_room_id);
+  SELECT result.round_id INTO created_round_id
+  FROM public.start_game_round(created_room_id, 'a') AS result;
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  PERFORM * FROM public.save_game_answers(
+    created_room_id, created_round_id, 'Alice', 'Ant', 'Athens', 'Anchor', false
+  );
+
+  SELECT id INTO player_answer_id
+  FROM public.answers
+  WHERE round_id = created_round_id AND player_id = joined_player_id;
+
+  -- The trigger must reject a player awarding points to themselves.
+  BEGIN
+    UPDATE public.answers SET points_earned = 40 WHERE id = player_answer_id;
+    RAISE EXCEPTION 'Self-scoring was unexpectedly allowed';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  BEGIN
+    PERFORM * FROM public.score_game_answer(player_answer_id, 'animal', true);
+    RAISE EXCEPTION 'A non-host unexpectedly scored an answer';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  PERFORM * FROM public.save_game_answers(
+    created_room_id, created_round_id, 'Alice', 'Ant', 'Athens', 'Anchor', true
+  );
+
+  -- A non-host cannot close submissions before the timer expires.
+  BEGIN
+    PERFORM * FROM public.close_game_submissions(created_round_id);
+    RAISE EXCEPTION 'Early non-host closure was unexpectedly allowed';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  PERFORM * FROM public.save_game_answers(
+    created_room_id, created_round_id, 'Henry', 'Hare', 'Helsinki', 'Hammer', true
+  );
+  PERFORM * FROM public.close_game_submissions(created_round_id);
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  BEGIN
+    PERFORM * FROM public.confirm_game_round(created_round_id);
+    RAISE EXCEPTION 'A non-host unexpectedly confirmed the round';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+
+  SELECT result.points_earned INTO returned_points
+  FROM public.score_game_answer(player_answer_id, 'animal', true) AS result;
+  IF returned_points <> 10 THEN
+    RAISE EXCEPTION 'Expected 10 points, got %', returned_points;
+  END IF;
+
+  PERFORM * FROM public.confirm_game_round(created_round_id);
+  IF (SELECT total_score FROM public.players WHERE id = joined_player_id) <> 10 THEN
+    RAISE EXCEPTION 'Leaderboard total was not updated atomically';
+  END IF;
+  IF (SELECT status FROM public.rounds WHERE id = created_round_id) <> 'ended' THEN
+    RAISE EXCEPTION 'Round was not finalized';
+  END IF;
+
+  -- A second round can only begin after the first one is finalized.
+  PERFORM * FROM public.start_game_round(created_room_id, 'B');
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+  BEGIN
+    PERFORM * FROM public.end_game(created_room_id);
+    RAISE EXCEPTION 'A non-host unexpectedly ended the game';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+END;
+$$;
+
+SELECT 'game SQL integration passed' AS result;

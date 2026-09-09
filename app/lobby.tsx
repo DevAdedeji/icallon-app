@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet,
-  ActivityIndicator, Share, Alert,
+  ActivityIndicator, Share,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { supabase } from '@/lib/supabase/client';
 import { Fonts } from '@/constants/theme';
+import { useAuth } from '@/features/auth/auth-context';
+import { startGame } from '@/features/game/game-service';
 
 type Player = {
   id: string;
@@ -19,62 +21,100 @@ type Player = {
 
 export default function LobbyScreen() {
   const insets = useSafeAreaInsets();
-  const { roomId, roomCode, isHost } = useLocalSearchParams<{
-    roomId: string;
-    roomCode: string;
-    isHost: string;
-  }>();
+  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+  const { session } = useAuth();
 
   const [players, setPlayers] = useState<Player[]>([]);
+  const [roomCode, setRoomCode] = useState('');
+  const [isHost, setIsHost] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
+
+  const loadPlayers = useCallback(async () => {
+    if (!roomId) return;
+    const { data, error: playersError } = await supabase
+      .from('players')
+      .select('id, display_name, is_host, total_score, is_connected')
+      .eq('room_id', roomId)
+      .order('joined_at');
+    if (playersError) throw playersError;
+    setPlayers(data ?? []);
+  }, [roomId]);
+
+  const loadRoom = useCallback(async () => {
+    if (!roomId || !session?.user.id) return;
+    const { data, error: roomError } = await supabase
+      .from('rooms')
+      .select('id, code, host_id, status')
+      .eq('id', roomId)
+      .maybeSingle();
+    if (roomError) throw roomError;
+    if (!data) throw new Error('This room is no longer available.');
+
+    setRoomCode(data.code);
+    setIsHost(data.host_id === session.user.id);
+    if (data.status === 'playing') {
+      router.replace({ pathname: '/game', params: { roomId: data.id } });
+    } else if (data.status === 'ended') {
+      throw new Error('This game has already ended.');
+    }
+  }, [roomId, session?.user.id]);
 
   // Fetch players and subscribe to real-time updates
   useEffect(() => {
     if (!roomId) return;
+    let active = true;
 
-    const fetchPlayers = async () => {
-      const { data, error } = await supabase
-        .from('players')
-        .select('id, display_name, is_host, total_score, is_connected')
-        .eq('room_id', roomId);
-      if (!error && data) setPlayers(data);
-      setLoading(false);
+    const initialize = async () => {
+      try {
+        await Promise.all([loadRoom(), loadPlayers()]);
+      } catch (loadError) {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Could not load this lobby.');
+      } finally {
+        if (active) setLoading(false);
+      }
     };
 
-    fetchPlayers();
+    void initialize();
 
     const channel = supabase
       .channel(`room-${roomId}-players`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` },
-        () => { fetchPlayers(); }
+        () => { void loadPlayers().catch(() => setConnectionStatus('offline')); }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
-        (payload) => {
-          if (payload.new.status === 'playing') {
-            router.replace({ pathname: '/game', params: { roomId, roomCode } });
-          }
-        }
+        () => { void loadRoom().catch((loadError) => setError(loadError.message)); }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (!active) return;
+        if (status === 'SUBSCRIBED') setConnectionStatus('connected');
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setConnectionStatus('offline');
+        }
+      });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [roomId, roomCode]);
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [roomId, loadPlayers, loadRoom]);
 
   const handleStartGame = async () => {
     setStarting(true);
-    const { error } = await supabase
-      .from('rooms')
-      .update({ status: 'playing', started_at: new Date().toISOString(), current_round: 1 })
-      .eq('id', roomId);
-    if (error) {
-      Alert.alert('Error', 'Failed to start game. Try again.');
+    setError(null);
+    try {
+      await startGame(roomId);
+    } catch (startError) {
+      setError(startError instanceof Error ? startError.message : 'Failed to start game.');
+    } finally {
+      setStarting(false);
     }
-    setStarting(false);
   };
 
   const handleShare = () => {
@@ -93,15 +133,20 @@ export default function LobbyScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.kicker}>GAME LOBBY</Text>
+            <Text style={connectionStatus === 'connected' ? styles.connectedText : styles.offlineText}>
+              {connectionStatus === 'connected' ? 'LIVE' : connectionStatus === 'connecting' ? 'CONNECTING…' : 'RECONNECTING…'}
+            </Text>
             <Text style={styles.title}>Room Code</Text>
             <View style={styles.codeBox}>
               <Text style={styles.codeText}>{roomCode}</Text>
             </View>
-            <Pressable onPress={handleShare} style={styles.shareButton}>
+            <Pressable accessibilityRole="button" testID="share-room-button" onPress={handleShare} style={styles.shareButton}>
               <AntDesign name="share-alt" size={16} color="#7CFD4D" />
               <Text style={styles.shareText}>Share invite</Text>
             </Pressable>
           </View>
+
+          {error && <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
 
           {/* Players */}
           <View style={styles.section}>
@@ -135,8 +180,10 @@ export default function LobbyScreen() {
           </View>
 
           {/* Start button — host only */}
-          {isHost === 'true' && (
+          {isHost && (
             <Pressable
+              accessibilityRole="button"
+              testID="start-game-button"
               style={[styles.startButton, (starting || players.length < 1) && styles.buttonDisabled]}
               onPress={handleStartGame}
               disabled={starting || players.length < 1}
@@ -151,7 +198,7 @@ export default function LobbyScreen() {
             </Pressable>
           )}
 
-          {isHost !== 'true' && (
+          {!isHost && (
             <View style={styles.waitingBox}>
               <ActivityIndicator color="#7CFD4D" size="small" />
               <Text style={styles.waitingText}>Waiting for host to start…</Text>
@@ -173,6 +220,10 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 32 },
   kicker: { color: '#9CB7A1', letterSpacing: 2.2, fontSize: 12, fontFamily: Fonts.mono, marginBottom: 8 },
   title: { color: '#F3FFF6', fontSize: 20, fontWeight: '700', fontFamily: Fonts.sans, marginBottom: 12 },
+  connectedText: { color: '#7CFD4D', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.4, marginBottom: 8 },
+  offlineText: { color: '#F8D77A', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.1, marginBottom: 8 },
+  errorBox: { backgroundColor: 'rgba(220,38,38,0.14)', borderColor: 'rgba(220,38,38,0.5)', borderRadius: 12, borderWidth: 1, marginBottom: 20, padding: 12 },
+  errorText: { color: '#FCA5A5', fontFamily: Fonts.sans, fontSize: 14 },
   codeBox: {
     backgroundColor: 'rgba(124, 253, 77, 0.1)',
     borderWidth: 1,

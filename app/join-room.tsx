@@ -25,7 +25,7 @@ export default function JoinRoomScreen() {
       const room = await joinRoomSession(parsedCode.data);
       router.replace({
         pathname: '/lobby',
-        params: { roomId: room.roomId, roomCode: room.roomCode, isHost: String(room.isHost) },
+        params: { roomId: room.roomId },
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to join room');
