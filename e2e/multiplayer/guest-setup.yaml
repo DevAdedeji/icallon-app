@@ -1,0 +1,79 @@
+appId: com.anonymous.icallon
+name: Multiplayer guest setup
+---
+- launchApp:
+    clearState: true
+- openLink: ${DEV_CLIENT_URL}
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "MULTIPLAYER WORD BATTLE"
+    timeout: 30000
+- openLink: "icallon://login"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "login-email-input"
+    timeout: 15000
+- tapOn:
+    id: "login-email-input"
+- inputText: ${GUEST_EMAIL}
+- tapOn:
+    id: "login-password-input"
+- inputText: ${TEST_PASSWORD}
+- tapOn: "Sign in to your account to play"
+- tapOn:
+    id: "login-submit-button"
+- runFlow:
+    when:
+      visible: "Save Password?"
+    commands:
+      - tapOn: "Not Now"
+- extendedWaitUntil:
+    visible: "Hey, ${GUEST_USERNAME}."
+    timeout: 30000
+- tapOn:
+    id: "home-join-room"
+- tapOn:
+    id: "room-code-input"
+- inputText: ${ROOM_CODE}
+- tapOn: "Enter the 6-character room code shared by the host."
+- tapOn:
+    id: "join-room-submit"
+- extendedWaitUntil:
+    visible: ${HOST_USERNAME}
+    timeout: 30000
+- assertVisible: ${GUEST_USERNAME}

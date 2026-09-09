@@ -138,7 +138,7 @@ export default function LobbyScreen() {
             </Text>
             <Text style={styles.title}>Room Code</Text>
             <View style={styles.codeBox}>
-              <Text style={styles.codeText}>{roomCode}</Text>
+              <Text testID="room-code" style={styles.codeText}>{roomCode}</Text>
             </View>
             <Pressable accessibilityRole="button" testID="share-room-button" onPress={handleShare} style={styles.shareButton}>
               <AntDesign name="share-alt" size={16} color="#7CFD4D" />

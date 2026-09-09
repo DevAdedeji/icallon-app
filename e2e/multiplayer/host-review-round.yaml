@@ -1,0 +1,43 @@
+appId: com.anonymous.icallon
+name: Host reviews and confirms round
+---
+- launchApp:
+    stopApp: false
+- tapOn:
+    id: "close-submissions-button"
+- extendedWaitUntil:
+    visible: "Review answers"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "score-${GUEST_USERNAME}-name-valid"
+    direction: DOWN
+- tapOn:
+    id: "score-${GUEST_USERNAME}-name-valid"
+- scrollUntilVisible:
+    element:
+      id: "score-${GUEST_USERNAME}-animal-valid"
+    direction: DOWN
+- tapOn:
+    id: "score-${GUEST_USERNAME}-animal-valid"
+- scrollUntilVisible:
+    element:
+      id: "score-${GUEST_USERNAME}-place-valid"
+    direction: DOWN
+- tapOn:
+    id: "score-${GUEST_USERNAME}-place-valid"
+- scrollUntilVisible:
+    element:
+      id: "score-${GUEST_USERNAME}-thing-valid"
+    direction: DOWN
+- tapOn:
+    id: "score-${GUEST_USERNAME}-thing-valid"
+- scrollUntilVisible:
+    element:
+      id: "confirm-round-button"
+    direction: DOWN
+- tapOn:
+    id: "confirm-round-button"
+- extendedWaitUntil:
+    visible: "Choose a letter"
+    timeout: 30000

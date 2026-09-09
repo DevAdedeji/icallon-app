@@ -70,6 +70,14 @@ With an iOS Simulator booted and the development build installed, run the simula
 npm run e2e:ios
 ```
 
+The complete multiplayer suite uses two booted simulators and dedicated test accounts:
+
+```bash
+npm run e2e:ios:multiplayer
+```
+
+On its first run, the script generates dedicated credentials in the ignored `.e2e/credentials` file and provisions two test-only Supabase users. You can override them with `E2E_HOST_EMAIL`, `E2E_HOST_USERNAME`, `E2E_GUEST_EMAIL`, `E2E_GUEST_USERNAME`, and `E2E_TEST_PASSWORD`. The suite creates a three-round room on the host simulator, joins from the guest simulator, submits and scores every round, and verifies the 120-point final leaderboard on both devices.
+
 Expo can open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)

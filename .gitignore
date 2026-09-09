@@ -34,6 +34,10 @@ yarn-error.*
 .env*.local
 .env
 
+# generated test artifacts
+/artifacts/
+/.e2e/
+
 # typescript
 *.tsbuildinfo
 

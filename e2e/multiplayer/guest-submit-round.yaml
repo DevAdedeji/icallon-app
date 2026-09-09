@@ -1,0 +1,31 @@
+appId: com.anonymous.icallon
+name: Guest submits game round
+---
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "answer-name"
+    timeout: 90000
+- tapOn:
+    id: "answer-name"
+- inputText: ${ANSWER_NAME}
+- tapOn:
+    id: "answer-animal"
+- inputText: ${ANSWER_ANIMAL}
+- tapOn:
+    id: "answer-place"
+- inputText: ${ANSWER_PLACE}
+- tapOn:
+    id: "answer-thing"
+- inputText: ${ANSWER_THING}
+- tapOn: "thing"
+- scrollUntilVisible:
+    element:
+      id: "submit-answers-button"
+    direction: DOWN
+- tapOn:
+    id: "submit-answers-button"
+- extendedWaitUntil:
+    visible: "Answers submitted. Waiting for the host to review."
+    timeout: 30000

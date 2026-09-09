@@ -1,0 +1,22 @@
+appId: com.anonymous.icallon
+name: Host starts game round
+---
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      visible:
+        id: "start-game-button"
+    commands:
+      - tapOn:
+          id: "start-game-button"
+- extendedWaitUntil:
+    visible: "Choose a letter"
+    timeout: 30000
+- tapOn:
+    id: "letter-option-${ROUND_LETTER}"
+- extendedWaitUntil:
+    visible:
+      id: "answer-name"
+    timeout: 30000
+- assertVisible: ${ROUND_LETTER}
