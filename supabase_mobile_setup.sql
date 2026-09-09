@@ -1309,6 +1309,83 @@ $$;
 REVOKE ALL ON FUNCTION public.get_daily_challenge() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_daily_challenge() TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.get_my_progression()
+RETURNS TABLE (
+  xp bigint,
+  level integer,
+  level_progress bigint,
+  level_target integer,
+  multiplayer_games bigint,
+  multiplayer_wins bigint,
+  solo_games bigint,
+  solo_wins bigint,
+  daily_challenges bigint,
+  total_points bigint,
+  best_score integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  WITH multiplayer AS (
+    SELECT
+      count(*) AS games,
+      count(*) FILTER (WHERE result.is_winner) AS wins,
+      COALESCE(sum(result.score), 0)::bigint AS points,
+      COALESCE(max(result.score), 0)::integer AS best
+    FROM public.player_game_results AS result
+    WHERE result.user_id = auth.uid()::text
+  ), solo AS (
+    SELECT
+      count(*) AS all_games,
+      count(*) FILTER (WHERE result.mode = 'solo') AS games,
+      count(*) FILTER (WHERE result.mode = 'solo' AND result.won) AS wins,
+      count(*) FILTER (WHERE result.mode = 'daily') AS dailies,
+      count(*) FILTER (WHERE result.won) AS all_wins,
+      COALESCE(sum(result.player_score), 0)::bigint AS points,
+      COALESCE(max(result.player_score), 0)::integer AS best
+    FROM public.solo_results AS result
+    WHERE result.user_id = auth.uid()::text
+  ), combined AS (
+    SELECT
+      multiplayer.*,
+      solo.all_games,
+      solo.games AS solo_game_count,
+      solo.wins AS solo_win_count,
+      solo.dailies,
+      solo.all_wins,
+      solo.points AS solo_points,
+      solo.best AS solo_best,
+      (
+        multiplayer.games * 50
+        + multiplayer.points
+        + multiplayer.wins * 75
+        + solo.all_games * 35
+        + solo.points
+        + solo.all_wins * 50
+        + solo.dailies * 25
+      )::bigint AS total_xp
+    FROM multiplayer CROSS JOIN solo
+  )
+  SELECT
+    combined.total_xp,
+    floor(combined.total_xp / 500.0)::integer + 1,
+    mod(combined.total_xp, 500::bigint),
+    500,
+    combined.games,
+    combined.wins,
+    combined.solo_game_count,
+    combined.solo_win_count,
+    combined.dailies,
+    combined.points + combined.solo_points,
+    greatest(combined.best, combined.solo_best)
+  FROM combined;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_my_progression() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_my_progression() TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_my_game_stats()
 RETURNS TABLE (
   games_played bigint,
