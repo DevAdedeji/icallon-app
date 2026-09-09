@@ -140,7 +140,11 @@ export default function GameScreen() {
       setSecondsLeft(remaining);
       if (remaining === 0 && !endRequested.current) {
         endRequested.current = true;
-        closeSubmissions(round.id).catch((error) => setNotice(error.message));
+        closeSubmissions(round.id).catch(() => {
+          // The database clock is authoritative. Retry if this device reached
+          // zero slightly early instead of leaving the round stuck.
+          endRequested.current = false;
+        });
       }
     };
     tick();

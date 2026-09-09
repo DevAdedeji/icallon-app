@@ -1,4 +1,4 @@
-import { applyAnswerScore, remainingRoundSeconds } from '@/features/game/game-state';
+import { applyAnswerScore, databaseTimestampMs, remainingRoundSeconds } from '@/features/game/game-state';
 import type { GameAnswer } from '@/lib/game';
 
 const answer: GameAnswer = {
@@ -20,6 +20,20 @@ describe('game state helpers', () => {
   it('derives a device-independent round countdown', () => {
     expect(remainingRoundSeconds('2026-01-01T00:00:00.000Z', 60, Date.parse('2026-01-01T00:00:10.100Z'))).toBe(50);
     expect(remainingRoundSeconds('2026-01-01T00:00:00.000Z', 60, Date.parse('2026-01-01T00:01:01.000Z'))).toBe(0);
+  });
+
+  it('parses PostgreSQL microsecond timestamps consistently across JavaScript runtimes', () => {
+    expect(databaseTimestampMs('2026-09-09T04:47:59.007323+00:00')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
+    expect(databaseTimestampMs('2026-09-09 06:47:59.007323+02:00')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
+    expect(databaseTimestampMs('2026-09-08T23:47:59.007323-05:00')).toBe(Date.UTC(2026, 8, 9, 4, 47, 59, 7));
+  });
+
+  it('counts down from PostgreSQL timestamps with microsecond precision', () => {
+    expect(remainingRoundSeconds(
+      '2026-09-09T04:47:59.007323+00:00',
+      120,
+      Date.UTC(2026, 8, 9, 4, 48, 9, 108),
+    )).toBe(110);
   });
 
   it('applies the score returned by the database to optimistic review state', () => {
