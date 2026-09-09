@@ -16,7 +16,18 @@ BEGIN
 
   SELECT result.room_id, result.room_code
   INTO created_room_id, created_room_code
-  FROM public.create_game_room(3, 30) AS result;
+  FROM public.create_game_room_v2(
+    3,
+    30,
+    'world',
+    '["Country", "City", "Landmark", "Language"]'::jsonb
+  ) AS result;
+
+  IF (SELECT category_pack FROM public.rooms WHERE id = created_room_id) <> 'world'
+    OR (SELECT category_labels FROM public.rooms WHERE id = created_room_id) <>
+      '["Country", "City", "Landmark", "Language"]'::jsonb THEN
+    RAISE EXCEPTION 'Category pack was not stored with the room';
+  END IF;
 
   IF (SELECT count(*) FROM public.players WHERE room_id = created_room_id AND is_host) <> 1 THEN
     RAISE EXCEPTION 'Host player was not created atomically';

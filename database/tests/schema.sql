@@ -33,6 +33,8 @@ CREATE TABLE public.rooms (
   time_per_round integer NOT NULL DEFAULT 60,
   current_round integer NOT NULL DEFAULT 0,
   current_round_id text,
+  category_pack text NOT NULL DEFAULT 'classic',
+  category_labels jsonb NOT NULL DEFAULT '["Name", "Animal", "Place", "Thing"]'::jsonb,
   created_at timestamp NOT NULL DEFAULT now(),
   started_at timestamp,
   ended_at timestamp

@@ -57,9 +57,11 @@ function roomError(error: unknown): Error {
 export async function createRoomSession(settings: RoomSettings): Promise<RoomSession> {
   const validated = roomSettingsSchema.parse(settings);
   const { data, error } = await supabase
-    .rpc('create_game_room', {
+    .rpc('create_game_room_v2', {
       requested_max_rounds: validated.maxRounds,
       requested_time_per_round: validated.timePerRound,
+      requested_category_pack: validated.categoryPack,
+      requested_category_labels: validated.categoryLabels,
     })
     .single<CreateRoomRow>();
 

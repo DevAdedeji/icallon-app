@@ -10,6 +10,8 @@ export type Room = {
   current_round: number;
   current_round_id: string | null;
   game_number: number;
+  category_pack: string;
+  category_labels: string[];
   started_at: string | null;
 };
 
@@ -46,7 +48,6 @@ export type GameAnswer = AnswerValues & {
 };
 
 export const EMPTY_ANSWERS: AnswerValues = { name: '', animal: '', place: '', thing: '' };
-export const CATEGORIES: Array<keyof AnswerValues> = ['name', 'animal', 'place', 'thing'];
 
 export async function getPlayer(roomId: string, userId: string) {
   const { data, error } = await supabase

@@ -43,6 +43,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS answers_player_round_unique
 ALTER TABLE public.rooms
   ADD COLUMN IF NOT EXISTS game_number integer NOT NULL DEFAULT 1;
 
+ALTER TABLE public.rooms
+  ADD COLUMN IF NOT EXISTS category_pack text NOT NULL DEFAULT 'classic';
+
+ALTER TABLE public.rooms
+  ADD COLUMN IF NOT EXISTS category_labels jsonb NOT NULL
+  DEFAULT '["Name", "Animal", "Place", "Thing"]'::jsonb;
+
 ALTER TABLE public.players
   ADD COLUMN IF NOT EXISTS last_seen_at timestamp NOT NULL DEFAULT now();
 
@@ -186,6 +193,103 @@ $$;
 
 REVOKE ALL ON FUNCTION public.create_game_room(integer, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_game_room(integer, integer) TO authenticated;
+
+-- Category-aware room creation. The existing function remains available for
+-- older clients while current clients use this explicit versioned contract.
+CREATE OR REPLACE FUNCTION public.create_game_room_v2(
+  requested_max_rounds integer,
+  requested_time_per_round integer,
+  requested_category_pack text,
+  requested_category_labels jsonb
+)
+RETURNS TABLE (room_id text, room_code text, is_host boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  created_room_id text;
+  generated_code text;
+  profile_name text;
+  normalized_pack text := lower(trim(requested_category_pack));
+  normalized_labels jsonb;
+  attempt integer;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+  IF requested_max_rounds NOT IN (3, 5, 7, 10) THEN
+    RAISE EXCEPTION 'Invalid number of rounds' USING ERRCODE = '22023';
+  END IF;
+  IF requested_time_per_round NOT IN (30, 60, 90, 120) THEN
+    RAISE EXCEPTION 'Invalid round timer' USING ERRCODE = '22023';
+  END IF;
+  IF normalized_pack NOT IN ('classic', 'world', 'food', 'entertainment', 'custom') THEN
+    RAISE EXCEPTION 'Invalid category pack' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_typeof(requested_category_labels) <> 'array'
+    OR jsonb_array_length(requested_category_labels) <> 4
+    OR EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(requested_category_labels) AS label
+      WHERE length(trim(label)) < 1 OR length(trim(label)) > 24
+    )
+    OR (SELECT count(DISTINCT lower(trim(label))) FROM jsonb_array_elements_text(requested_category_labels) AS label) <> 4 THEN
+    RAISE EXCEPTION 'Four different category labels are required' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT jsonb_agg(trim(label) ORDER BY position)
+  INTO normalized_labels
+  FROM jsonb_array_elements_text(requested_category_labels) WITH ORDINALITY AS item(label, position);
+
+  SELECT profile.username INTO profile_name
+  FROM public.users AS profile
+  WHERE profile.id = caller_id::text;
+
+  IF profile_name IS NULL THEN
+    RAISE EXCEPTION 'Player profile not found' USING ERRCODE = '23503';
+  END IF;
+
+  FOR attempt IN 1..10 LOOP
+    created_room_id := gen_random_uuid()::text;
+    SELECT string_agg(
+      substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', floor(random() * 32)::integer + 1, 1),
+      ''
+    ) INTO generated_code
+    FROM generate_series(1, 6);
+
+    BEGIN
+      INSERT INTO public.rooms (
+        id, code, host_id, status, max_rounds, time_per_round, current_round,
+        category_pack, category_labels
+      ) VALUES (
+        created_room_id, generated_code, caller_id::text, 'lobby',
+        requested_max_rounds, requested_time_per_round, 0,
+        normalized_pack, normalized_labels
+      );
+      EXIT;
+    EXCEPTION WHEN unique_violation THEN
+      created_room_id := NULL;
+    END;
+  END LOOP;
+
+  IF created_room_id IS NULL THEN
+    RAISE EXCEPTION 'Could not allocate a unique room code';
+  END IF;
+
+  INSERT INTO public.players (
+    id, room_id, user_id, display_name, is_host, total_score, is_connected
+  ) VALUES (
+    gen_random_uuid()::text, created_room_id, caller_id::text,
+    profile_name, true, 0, true
+  );
+
+  RETURN QUERY SELECT created_room_id, generated_code, true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_game_room_v2(integer, integer, text, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_game_room_v2(integer, integer, text, jsonb) TO authenticated;
 
 -- Join and reconnect in one transaction. The database derives identity,
 -- display name, and host status instead of trusting values from the device.

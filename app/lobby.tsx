@@ -12,6 +12,7 @@ import { useAuth } from '@/features/auth/auth-context';
 import { startGame } from '@/features/game/game-service';
 import { useRoomPresence } from '@/features/rooms/use-room-presence';
 import { buildRoomInvite } from '@/features/rooms/room-invite';
+import { categoryPackName } from '@/features/game/category-packs';
 
 type Player = {
   id: string;
@@ -28,6 +29,7 @@ export default function LobbyScreen() {
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [roomCode, setRoomCode] = useState('');
+  const [packName, setPackName] = useState('Classic');
   const [isHost, setIsHost] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -50,13 +52,14 @@ export default function LobbyScreen() {
     if (!roomId || !session?.user.id) return;
     const { data, error: roomError } = await supabase
       .from('rooms')
-      .select('id, code, host_id, status')
+      .select('id, code, host_id, status, category_pack')
       .eq('id', roomId)
       .maybeSingle();
     if (roomError) throw roomError;
     if (!data) throw new Error('This room is no longer available.');
 
     setRoomCode(data.code);
+    setPackName(categoryPackName(data.category_pack));
     setIsHost(data.host_id === session.user.id);
     if (data.status === 'playing') {
       router.replace({ pathname: '/game', params: { roomId: data.id } });
@@ -154,6 +157,7 @@ export default function LobbyScreen() {
               {connectionStatus === 'connected' ? 'LIVE' : connectionStatus === 'connecting' ? 'CONNECTING…' : 'RECONNECTING…'}
             </Text>
             <Text style={styles.title}>Room Code</Text>
+            <Text testID="lobby-category-pack" style={styles.packText}>{packName}</Text>
             <View style={styles.codeBox}>
               <Text testID="room-code" style={styles.codeText}>{roomCode}</Text>
             </View>
@@ -239,6 +243,7 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 32 },
   kicker: { color: '#9CB7A1', letterSpacing: 2.2, fontSize: 12, fontFamily: Fonts.mono, marginBottom: 8 },
   title: { color: '#F3FFF6', fontSize: 20, fontWeight: '700', fontFamily: Fonts.sans, marginBottom: 12 },
+  packText: { color: '#9CB7A1', fontSize: 12, fontFamily: Fonts.sans, marginTop: -8, marginBottom: 12 },
   connectedText: { color: '#7CFD4D', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.4, marginBottom: 8 },
   offlineText: { color: '#F8D77A', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.1, marginBottom: 8 },
   shareStatus: { color: '#9CB7A1', fontSize: 11, lineHeight: 16, fontFamily: Fonts.sans, textAlign: 'center', marginTop: 8, maxWidth: 280 },
