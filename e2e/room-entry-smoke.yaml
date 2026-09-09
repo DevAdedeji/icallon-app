@@ -1,0 +1,23 @@
+appId: com.anonymous.icallon
+name: Protected room entry smoke test
+---
+- launchApp:
+    stopApp: false
+- openLink: "icallon://welcome"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- assertVisible: "MULTIPLAYER WORD BATTLE"
+- tapOn: "Create Room"
+- assertVisible: "Sign in to your account to play"
+- openLink: "icallon://welcome"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- assertVisible: "MULTIPLAYER WORD BATTLE"
+- tapOn: "Join Room"
+- assertVisible: "Sign in to your account to play"

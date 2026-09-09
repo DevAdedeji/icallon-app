@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand --no-watchman",
     "test:watch": "jest --watch --no-watchman",
-    "e2e:ios": "maestro test e2e/auth-smoke.yaml",
+    "e2e:ios": "maestro test e2e",
     "verify": "npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {
