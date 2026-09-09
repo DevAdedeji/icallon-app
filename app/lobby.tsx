@@ -11,6 +11,7 @@ import { Fonts } from '@/constants/theme';
 import { useAuth } from '@/features/auth/auth-context';
 import { startGame } from '@/features/game/game-service';
 import { useRoomPresence } from '@/features/rooms/use-room-presence';
+import { buildRoomInvite } from '@/features/rooms/room-invite';
 
 type Player = {
   id: string;
@@ -31,6 +32,7 @@ export default function LobbyScreen() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
 
   const loadPlayers = useCallback(async () => {
@@ -122,8 +124,15 @@ export default function LobbyScreen() {
     }
   };
 
-  const handleShare = () => {
-    Share.share({ message: `Join my ICallOn game! Room code: ${roomCode}` });
+  const handleShare = async () => {
+    setShareStatus(null);
+    try {
+      const invite = buildRoomInvite(roomId, roomCode);
+      await Share.share({ title: 'Join my ICallOn game', message: invite.message });
+      setShareStatus('Invite ready to send — it includes app and web options.');
+    } catch (shareError) {
+      setShareStatus(shareError instanceof Error ? shareError.message : 'Could not open the share sheet.');
+    }
   };
 
   return (
@@ -145,10 +154,11 @@ export default function LobbyScreen() {
             <View style={styles.codeBox}>
               <Text testID="room-code" style={styles.codeText}>{roomCode}</Text>
             </View>
-            <Pressable accessibilityRole="button" testID="share-room-button" onPress={handleShare} style={styles.shareButton}>
+            <Pressable accessibilityRole="button" testID="share-room-button" onPress={() => { void handleShare(); }} style={styles.shareButton}>
               <AntDesign name="share-alt" size={16} color="#7CFD4D" />
               <Text style={styles.shareText}>Share invite</Text>
             </Pressable>
+            {shareStatus && <Text accessibilityLiveRegion="polite" style={styles.shareStatus}>{shareStatus}</Text>}
           </View>
 
           {error && <View accessibilityRole="alert" style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View>}
@@ -228,6 +238,7 @@ const styles = StyleSheet.create({
   title: { color: '#F3FFF6', fontSize: 20, fontWeight: '700', fontFamily: Fonts.sans, marginBottom: 12 },
   connectedText: { color: '#7CFD4D', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.4, marginBottom: 8 },
   offlineText: { color: '#F8D77A', fontSize: 10, fontFamily: Fonts.mono, letterSpacing: 1.1, marginBottom: 8 },
+  shareStatus: { color: '#9CB7A1', fontSize: 11, lineHeight: 16, fontFamily: Fonts.sans, textAlign: 'center', marginTop: 8, maxWidth: 280 },
   errorBox: { backgroundColor: 'rgba(220,38,38,0.14)', borderColor: 'rgba(220,38,38,0.5)', borderRadius: 12, borderWidth: 1, marginBottom: 20, padding: 12 },
   errorText: { color: '#FCA5A5', fontFamily: Fonts.sans, fontSize: 14 },
   codeBox: {

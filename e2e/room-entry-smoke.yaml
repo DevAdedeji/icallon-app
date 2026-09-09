@@ -21,3 +21,14 @@ name: Protected room entry smoke test
 - assertVisible: "MULTIPLAYER WORD BATTLE"
 - tapOn: "Join Room"
 - assertVisible: "Sign in to your account to play"
+- openLink: "icallon://invite?code=ABC234"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- assertVisible: "YOU’RE INVITED"
+- assertVisible: "ABC234"
+- tapOn:
+    id: "invite-login"
+- assertVisible: "Sign in to your account to play"

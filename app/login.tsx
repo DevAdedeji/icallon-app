@@ -7,12 +7,13 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
 import { ensurePlayerProfile } from '@/features/auth/profile';
+import { inviteCodeFromParam } from '@/features/rooms/room-invite';
 import { loginSchema, type LoginFormInputs } from '@/schemas/auth';
 import { supabase } from '@/lib/supabase/client';
 import { signInWithGoogle } from '@/lib/supabase/oauth';
 
 export default function LoginScreen() {
-  const { notice, returnTo } = useLocalSearchParams<{ notice?: string; returnTo?: string }>();
+  const { notice, returnTo, roomCode } = useLocalSearchParams<{ notice?: string; returnTo?: string; roomCode?: string | string[] }>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -26,6 +27,15 @@ export default function LoginScreen() {
   const destination = returnTo === '/create-room' || returnTo === '/join-room'
     ? returnTo
     : '/game-lobby';
+  const invitedCode = inviteCodeFromParam(roomCode);
+
+  const finishAuthentication = () => {
+    if (destination === '/join-room' && invitedCode) {
+      router.replace({ pathname: '/join-room', params: { code: invitedCode } });
+      return;
+    }
+    router.replace(destination);
+  };
 
   const onSubmit = async (data: LoginFormInputs) => {
     setError(null);
@@ -41,7 +51,7 @@ export default function LoginScreen() {
       if (!authData.user) throw new Error('Login succeeded without a user session. Please try again.');
 
       await ensurePlayerProfile(authData.user);
-      router.replace(destination);
+      finishAuthentication();
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'An unexpected error occurred');
     } finally {
@@ -57,7 +67,7 @@ export default function LoginScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Google sign-in succeeded without a user session.');
       await ensurePlayerProfile(user);
-      router.replace(destination);
+      finishAuthentication();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Google sign-in failed');
     } finally {
@@ -184,7 +194,11 @@ export default function LoginScreen() {
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Don&apos;t have an account? </Text>
-        <Pressable testID="login-signup-link" onPress={() => router.push('/signup')} disabled={loading}>
+        <Pressable
+          testID="login-signup-link"
+          onPress={() => router.push({ pathname: '/signup', params: { returnTo: destination, roomCode: invitedCode ?? '' } })}
+          disabled={loading}
+        >
           <Text style={[styles.footerLink, loading && styles.disabledLink]}>Sign up</Text>
         </Pressable>
           </View>

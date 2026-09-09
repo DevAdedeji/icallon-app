@@ -1,17 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { Fonts } from '@/constants/theme';
 import { joinRoomSession } from '@/features/rooms/room-service';
+import { inviteCodeFromParam } from '@/features/rooms/room-invite';
 import { roomCodeSchema } from '@/features/rooms/room-validation';
 
 export default function JoinRoomScreen() {
   const insets = useSafeAreaInsets();
-  const [roomCode, setRoomCode] = useState('');
+  const { code } = useLocalSearchParams<{ code?: string | string[] }>();
+  const invitedCode = inviteCodeFromParam(code);
+  const [roomCode, setRoomCode] = useState(invitedCode ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (invitedCode) setRoomCode(invitedCode);
+  }, [invitedCode]);
 
   const handleJoinRoom = async () => {
     const parsedCode = roomCodeSchema.safeParse(roomCode);
@@ -43,9 +50,15 @@ export default function JoinRoomScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scroll}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.kicker}>JOIN GAME</Text>
+            <Text style={[styles.kicker, invitedCode && styles.invitedKicker]}>
+              {invitedCode ? 'INVITE READY' : 'JOIN GAME'}
+            </Text>
             <Text style={styles.title}>Join Room</Text>
-            <Text style={styles.subtitle}>Enter the 6-character room code shared by the host.</Text>
+            <Text style={styles.subtitle}>
+              {invitedCode
+                ? 'Your room code is ready. Tap below when you’re set to enter the lobby.'
+                : 'Enter the 6-character room code shared by the host.'}
+            </Text>
           </View>
 
           {error && (
@@ -92,6 +105,7 @@ const styles = StyleSheet.create({
   backText: { color: '#9CB7A1', fontSize: 14, fontFamily: Fonts.sans },
   header: { marginBottom: 28 },
   kicker: { color: '#9CB7A1', letterSpacing: 2.2, fontSize: 12, fontFamily: Fonts.mono, marginBottom: 8 },
+  invitedKicker: { color: '#7CFD4D' },
   title: { color: '#F3FFF6', fontSize: 34, fontWeight: '900', fontFamily: Fonts.rounded, marginBottom: 6 },
   subtitle: { color: '#CFE7D4', fontSize: 15, fontFamily: Fonts.sans },
   errorBox: {
