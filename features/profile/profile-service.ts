@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { mapPlayerStats, type PlayerStats, type StatsRow } from '@/features/profile/profile-state';
+import { mapProgression, type Progression, type ProgressionRow } from '@/features/profile/progression-state';
 
 export type { PlayerStats } from '@/features/profile/profile-state';
 
@@ -63,4 +64,10 @@ export async function getMatchHistory(limit = 20): Promise<MatchHistoryItem[]> {
     winnerName: row.winner_name,
     winnerScore: row.winner_score,
   }));
+}
+
+export async function getProgression(): Promise<Progression> {
+  const { data, error } = await supabase.rpc('get_my_progression').single<ProgressionRow>();
+  if (error) throw profileError(error);
+  return mapProgression(data);
 }

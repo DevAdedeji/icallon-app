@@ -16,10 +16,12 @@ import { Fonts } from '@/constants/theme';
 import {
   getMatchHistory,
   getPlayerStats,
+  getProgression,
   type MatchHistoryItem,
   type PlayerStats,
 } from '@/features/profile/profile-service';
 import { EMPTY_PLAYER_STATS } from '@/features/profile/profile-state';
+import { achievementsFor, EMPTY_PROGRESSION, type Progression } from '@/features/profile/progression-state';
 import { supabase } from '@/lib/supabase/client';
 
 export default function ProfileScreen() {
@@ -27,6 +29,7 @@ export default function ProfileScreen() {
   const [username, setUsername] = useState('Player');
   const [stats, setStats] = useState<PlayerStats>(EMPTY_PLAYER_STATS);
   const [history, setHistory] = useState<MatchHistoryItem[]>([]);
+  const [progression, setProgression] = useState<Progression>(EMPTY_PROGRESSION);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,15 +39,17 @@ export default function ProfileScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Your session expired. Please log in again.');
-      const [{ data: profile, error: profileError }, nextStats, nextHistory] = await Promise.all([
+      const [{ data: profile, error: profileError }, nextStats, nextHistory, nextProgression] = await Promise.all([
         supabase.from('users').select('username').eq('id', user.id).maybeSingle(),
         getPlayerStats(),
         getMatchHistory(),
+        getProgression(),
       ]);
       if (profileError) throw profileError;
       setUsername(profile?.username ?? user.email?.split('@')[0] ?? 'Player');
       setStats(nextStats);
       setHistory(nextHistory);
+      setProgression(nextProgression);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Your profile could not be loaded.');
     } finally {
@@ -92,11 +97,36 @@ export default function ProfileScreen() {
         ) : (
           <>
             <View testID="profile-stats" style={styles.statsGrid}>
-              <StatCard label="Games" value={stats.gamesPlayed} />
+              <StatCard label="Group games" value={stats.gamesPlayed} />
               <StatCard label="Wins" value={stats.wins} accent />
               <StatCard label="Total points" value={stats.totalPoints} />
               <StatCard label="Best score" value={stats.bestScore} />
               <StatCard label="Win streak" value={stats.currentWinStreak} wide />
+            </View>
+
+            <View testID="profile-level" style={styles.levelCard}>
+              <View style={styles.levelBadge}><Text style={styles.levelNumber}>{progression.level}</Text></View>
+              <View style={styles.levelCopy}>
+                <View style={styles.levelHeading}><Text style={styles.levelTitle}>Level {progression.level}</Text><Text style={styles.levelXp}>{progression.xp} XP</Text></View>
+                <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.min(100, (progression.levelProgress / progression.levelTarget) * 100)}%` }]} /></View>
+                <Text style={styles.levelMeta}>{progression.levelProgress}/{progression.levelTarget} XP to the next level</Text>
+              </View>
+            </View>
+
+            <View style={styles.modeStats}>
+              <Text style={styles.modeStat}>{progression.soloGames} solo games</Text>
+              <Text style={styles.modeDot}>·</Text>
+              <Text style={styles.modeStat}>{progression.soloWins} solo wins</Text>
+              <Text style={styles.modeDot}>·</Text>
+              <Text style={styles.modeStat}>{progression.dailyChallenges} dailies</Text>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Achievements</Text>
+              <Text style={styles.sectionCount}>{achievementsFor(progression).filter((item) => item.unlocked).length}/{achievementsFor(progression).length}</Text>
+            </View>
+            <View testID="profile-achievements" style={styles.achievementList}>
+              {achievementsFor(progression).map((achievement) => <View key={achievement.id} style={[styles.achievementCard, achievement.unlocked && styles.achievementUnlocked]}><Text style={[styles.achievementIcon, !achievement.unlocked && styles.achievementLocked]}>{achievement.icon}</Text><View style={styles.achievementCopy}><Text style={[styles.achievementName, achievement.unlocked && styles.achievementNameUnlocked]}>{achievement.name}</Text><Text style={styles.achievementDescription}>{achievement.description}</Text></View><Text style={styles.achievementProgress}>{achievement.unlocked ? 'UNLOCKED' : `${achievement.progress}/${achievement.target}`}</Text></View>)}
             </View>
 
             <View style={styles.sectionHeader}>
@@ -175,6 +205,29 @@ const styles = StyleSheet.create({
   statValue: { color: '#F3FFF6', fontFamily: Fonts.mono, fontSize: 27, fontWeight: '900' },
   statValueAccent: { color: '#7CFD4D' },
   statLabel: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 12, fontWeight: '700', marginTop: 5, textTransform: 'uppercase', letterSpacing: 0.8 },
+  levelCard: { marginTop: 12, borderRadius: 17, borderWidth: 1, borderColor: 'rgba(124,253,77,0.42)', backgroundColor: 'rgba(124,253,77,0.1)', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  levelBadge: { width: 52, height: 52, borderRadius: 17, backgroundColor: '#7CFD4D', alignItems: 'center', justifyContent: 'center' },
+  levelNumber: { color: '#071108', fontFamily: Fonts.rounded, fontSize: 25, fontWeight: '900' },
+  levelCopy: { flex: 1 },
+  levelHeading: { flexDirection: 'row', alignItems: 'center' },
+  levelTitle: { color: '#F3FFF6', fontFamily: Fonts.rounded, fontSize: 18, fontWeight: '900', flex: 1 },
+  levelXp: { color: '#7CFD4D', fontFamily: Fonts.mono, fontSize: 11, fontWeight: '800' },
+  progressTrack: { height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden', marginTop: 9 },
+  progressFill: { height: '100%', borderRadius: 4, backgroundColor: '#7CFD4D' },
+  levelMeta: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 10, marginTop: 6 },
+  modeStats: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 7, marginTop: 12 },
+  modeStat: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 11 },
+  modeDot: { color: '#526B57', fontFamily: Fonts.mono },
+  achievementList: { gap: 9 },
+  achievementCard: { minHeight: 70, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', backgroundColor: 'rgba(255,255,255,0.04)', padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  achievementUnlocked: { borderColor: 'rgba(248,215,122,0.35)', backgroundColor: 'rgba(248,215,122,0.07)' },
+  achievementIcon: { fontSize: 24 },
+  achievementLocked: { opacity: 0.28 },
+  achievementCopy: { flex: 1 },
+  achievementName: { color: '#78917D', fontFamily: Fonts.sans, fontWeight: '800' },
+  achievementNameUnlocked: { color: '#F8D77A' },
+  achievementDescription: { color: '#78917D', fontFamily: Fonts.sans, fontSize: 11, marginTop: 3 },
+  achievementProgress: { color: '#9CB7A1', fontFamily: Fonts.mono, fontSize: 8, letterSpacing: 0.5 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 32, marginBottom: 12 },
   sectionTitle: { color: '#F3FFF6', fontFamily: Fonts.rounded, fontWeight: '900', fontSize: 21, flex: 1 },
   sectionCount: { color: '#9CB7A1', fontFamily: Fonts.mono },

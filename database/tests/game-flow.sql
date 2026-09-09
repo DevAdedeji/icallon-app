@@ -243,6 +243,15 @@ BEGIN
     RAISE EXCEPTION 'Match history did not return the completed game';
   END IF;
 
+  PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  IF (SELECT progression.xp FROM public.get_my_progression() AS progression) <> 380
+    OR (SELECT progression.daily_challenges FROM public.get_my_progression() AS progression) <> 1
+    OR (SELECT progression.solo_wins FROM public.get_my_progression() AS progression) <> 1 THEN
+    RAISE EXCEPTION 'Combined player progression was calculated incorrectly';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+
   BEGIN
     PERFORM * FROM public.request_game_rematch(created_room_id);
     RAISE EXCEPTION 'A non-host unexpectedly requested a rematch';
