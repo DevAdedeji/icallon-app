@@ -10,28 +10,9 @@ name: Host completes final round
     timeout: 30000
 - scrollUntilVisible:
     element:
-      id: "score-${GUEST_USERNAME}-name-valid"
+      text: "40 points"
     direction: DOWN
-- tapOn:
-    id: "score-${GUEST_USERNAME}-name-valid"
-- scrollUntilVisible:
-    element:
-      id: "score-${GUEST_USERNAME}-animal-valid"
-    direction: DOWN
-- tapOn:
-    id: "score-${GUEST_USERNAME}-animal-valid"
-- scrollUntilVisible:
-    element:
-      id: "score-${GUEST_USERNAME}-place-valid"
-    direction: DOWN
-- tapOn:
-    id: "score-${GUEST_USERNAME}-place-valid"
-- scrollUntilVisible:
-    element:
-      id: "score-${GUEST_USERNAME}-thing-valid"
-    direction: DOWN
-- tapOn:
-    id: "score-${GUEST_USERNAME}-thing-valid"
+- assertVisible: "40 points"
 - scrollUntilVisible:
     element:
       id: "confirm-round-button"

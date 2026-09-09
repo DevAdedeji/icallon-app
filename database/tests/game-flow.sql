@@ -86,9 +86,13 @@ BEGIN
 
   PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
   PERFORM * FROM public.save_game_answers(
-    created_room_id, created_round_id, 'Henry', 'Hare', 'Helsinki', 'Hammer', true
+    created_room_id, created_round_id, 'Henry', '  ANT  ', 'Helsinki', 'Hammer', true
   );
   PERFORM * FROM public.close_game_submissions(created_round_id);
+
+  IF (SELECT points_earned FROM public.answers WHERE id = player_answer_id) <> 35 THEN
+    RAISE EXCEPTION 'Expected duplicate answer to receive 5 points';
+  END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
   BEGIN
@@ -102,12 +106,27 @@ BEGIN
 
   SELECT result.points_earned INTO returned_points
   FROM public.score_game_answer(player_answer_id, 'animal', true) AS result;
-  IF returned_points <> 10 THEN
-    RAISE EXCEPTION 'Expected 10 points, got %', returned_points;
+  IF returned_points <> 35 THEN
+    RAISE EXCEPTION 'Expected 35 auto-reviewed points, got %', returned_points;
   END IF;
 
+  SELECT result.points_earned INTO returned_points
+  FROM public.score_game_answer(player_answer_id, 'animal', false) AS result;
+  IF returned_points <> 30 THEN
+    RAISE EXCEPTION 'Rejecting a duplicate did not remove its 5 points';
+  END IF;
+  IF (
+    SELECT points_earned FROM public.answers
+    WHERE round_id = created_round_id AND player_id <> joined_player_id
+  ) <> 10 THEN
+    RAISE EXCEPTION 'The remaining duplicate did not become unique after rejection';
+  END IF;
+
+  SELECT result.points_earned INTO returned_points
+  FROM public.score_game_answer(player_answer_id, 'animal', true) AS result;
+
   PERFORM * FROM public.confirm_game_round(created_round_id);
-  IF (SELECT total_score FROM public.players WHERE id = joined_player_id) <> 10 THEN
+  IF (SELECT total_score FROM public.players WHERE id = joined_player_id) <> 35 THEN
     RAISE EXCEPTION 'Leaderboard total was not updated atomically';
   END IF;
   IF (SELECT status FROM public.rounds WHERE id = created_round_id) <> 'ended' THEN
@@ -149,7 +168,7 @@ BEGIN
   IF (SELECT stats.wins FROM public.get_my_game_stats() AS stats) <> 1 THEN
     RAISE EXCEPTION 'Winner statistics were not recorded';
   END IF;
-  IF (SELECT stats.total_points FROM public.get_my_game_stats() AS stats) <> 10 THEN
+  IF (SELECT stats.total_points FROM public.get_my_game_stats() AS stats) <> 35 THEN
     RAISE EXCEPTION 'Profile total points were not recorded';
   END IF;
   IF (SELECT count(*) FROM public.get_my_match_history(20)) <> 1 THEN
