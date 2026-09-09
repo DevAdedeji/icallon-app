@@ -3,10 +3,9 @@ import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndic
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
-import { supabase } from '@/lib/supabase/client';
 import { Fonts } from '@/constants/theme';
-import { ensurePlayerProfile } from '@/features/auth/profile';
-import { createId } from '@/lib/game';
+import { joinRoomSession } from '@/features/rooms/room-service';
+import { roomCodeSchema } from '@/features/rooms/room-validation';
 
 export default function JoinRoomScreen() {
   const insets = useSafeAreaInsets();
@@ -15,62 +14,19 @@ export default function JoinRoomScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const handleJoinRoom = async () => {
-    if (!roomCode.trim()) return;
+    const parsedCode = roomCodeSchema.safeParse(roomCode);
+    if (!parsedCode.success) {
+      setError(parsedCode.error.issues[0]?.message ?? 'Enter a valid room code');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('You must be logged in to join a room');
-        return;
-      }
-      await ensurePlayerProfile(user);
-
-      const { data: room, error: roomError } = await supabase
-        .from('rooms')
-        .select('*')
-        .eq('code', roomCode.toUpperCase().trim())
-        .maybeSingle();
-
-      if (roomError || !room) {
-        setError('Room not found. Check the code and try again.');
-        return;
-      }
-
-      if (room.status === 'ended') {
-        setError('This room has already ended.');
-        return;
-      }
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('username')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      // Check if already a player
-      const { data: existingPlayer } = await supabase
-        .from('players')
-        .select('id')
-        .eq('room_id', room.id)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!existingPlayer) {
-        const { error: playerError } = await supabase.from('players').insert({
-          id: createId(),
-          room_id: room.id,
-          user_id: user.id,
-          display_name: userData?.username ?? user.email ?? 'Player',
-          is_host: false,
-        });
-        if (playerError) {
-          setError('Failed to join room');
-          return;
-        }
-      }
-
-      router.replace({ pathname: '/lobby', params: { roomId: room.id, roomCode: room.code, isHost: 'false' } });
+      const room = await joinRoomSession(parsedCode.data);
+      router.replace({
+        pathname: '/lobby',
+        params: { roomId: room.roomId, roomCode: room.roomCode, isHost: String(room.isHost) },
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to join room');
     } finally {
@@ -101,6 +57,7 @@ export default function JoinRoomScreen() {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Room Code</Text>
             <TextInput
+              testID="room-code-input"
               style={styles.input}
               placeholder="e.g. ABC123"
               placeholderTextColor="rgba(255, 255, 255, 0.3)"
@@ -113,6 +70,7 @@ export default function JoinRoomScreen() {
           </View>
 
           <Pressable
+            testID="join-room-submit"
             style={[styles.joinButton, (loading || !roomCode) && styles.buttonDisabled]}
             onPress={handleJoinRoom}
             disabled={loading || !roomCode}

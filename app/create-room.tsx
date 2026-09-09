@@ -3,13 +3,9 @@ import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
-import { supabase } from '@/lib/supabase/client';
 import { Fonts } from '@/constants/theme';
-import { ensurePlayerProfile } from '@/features/auth/profile';
-import { createId } from '@/lib/game';
-
-const ROUND_OPTIONS = [3, 5, 7, 10];
-const TIMER_OPTIONS = [30, 60, 90, 120];
+import { createRoomSession } from '@/features/rooms/room-service';
+import { ROUND_OPTIONS, TIMER_OPTIONS } from '@/features/rooms/room-validation';
 
 export default function CreateRoomScreen() {
   const insets = useSafeAreaInsets();
@@ -26,62 +22,11 @@ export default function CreateRoomScreen() {
     setLoading(true);
     setError(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('You must be logged in to create a room');
-        return;
-      }
-      await ensurePlayerProfile(user);
-
-      function generateRoomCode() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let code = '';
-        for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-        return code;
-      }
-
-      let roomCode = generateRoomCode();
-      for (let i = 0; i < 10; i++) {
-        const { data: existing } = await supabase.from('rooms').select('id').eq('code', roomCode).maybeSingle();
-        if (!existing) break;
-        roomCode = generateRoomCode();
-      }
-
-      const roomId = createId();
-      const { data: room, error: insertError } = await supabase
-        .from('rooms')
-        .insert({
-          id: roomId,
-          code: roomCode,
-          host_id: user.id,
-          max_rounds: maxRounds,
-          time_per_round: timePerRound,
-          status: 'lobby',
-        })
-        .select()
-        .single();
-
-      if (insertError || !room) {
-        setError(insertError?.message ?? 'Failed to create room');
-        return;
-      }
-
-      // Create the host as a player
-      const { data: userData } = await supabase
-        .from('users')
-        .select('username')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      await supabase.from('players').insert({
-        id: createId(),
-        room_id: room.id,
-        user_id: user.id,
-        display_name: userData?.username ?? user.email ?? 'Host',
-        is_host: true,
+      const room = await createRoomSession({ maxRounds, timePerRound });
+      router.replace({
+        pathname: '/lobby',
+        params: { roomId: room.roomId, roomCode: room.roomCode, isHost: String(room.isHost) },
       });
-
-      router.replace({ pathname: '/lobby', params: { roomId: room.id, roomCode: room.code, isHost: 'true' } });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create room');
     } finally {
@@ -114,6 +59,7 @@ export default function CreateRoomScreen() {
             <View style={styles.optionRow}>
               {ROUND_OPTIONS.map((r) => (
                 <Pressable
+                  testID={`round-option-${r}`}
                   key={r}
                   onPress={() => setMaxRounds(r)}
                   style={[styles.optionTile, maxRounds === r && styles.optionTileActive]}
@@ -129,6 +75,7 @@ export default function CreateRoomScreen() {
             <View style={styles.optionRow}>
               {TIMER_OPTIONS.map((t) => (
                 <Pressable
+                  testID={`timer-option-${t}`}
                   key={t}
                   onPress={() => setTimePerRound(t)}
                   style={[styles.optionTile, timePerRound === t && styles.optionTileActive]}
@@ -140,6 +87,7 @@ export default function CreateRoomScreen() {
           </View>
 
           <Pressable
+            testID="create-room-submit"
             style={[styles.createButton, (loading || !maxRounds || !timePerRound) && styles.buttonDisabled]}
             onPress={handleCreateRoom}
             disabled={loading || !maxRounds || !timePerRound}
