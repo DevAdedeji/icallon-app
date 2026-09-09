@@ -15,6 +15,7 @@ import {
   saveGameAnswers,
   scoreAnswer,
   startRound,
+  requestRematch,
 } from '@/features/game/game-service';
 import { supabase } from '@/lib/supabase/client';
 import { AnswerValues, CATEGORIES, EMPTY_ANSWERS, GameAnswer, getPlayer, Player, Room, Round } from '@/lib/game';
@@ -33,6 +34,7 @@ export default function GameScreen() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [rematching, setRematching] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
@@ -74,6 +76,12 @@ export default function GameScreen() {
   }, [roomId, session?.user.id]);
 
   useEffect(() => { loadGame(); }, [loadGame]);
+
+  useEffect(() => {
+    if (room?.status === 'lobby') {
+      router.replace({ pathname: '/lobby', params: { roomId: room.id } });
+    }
+  }, [room]);
 
   const loadMyAnswers = useCallback(async () => {
     if (!round || !player) return;
@@ -230,10 +238,24 @@ export default function GameScreen() {
     }
   };
 
+  const rematch = async () => {
+    if (!room || !isHost || rematching) return;
+    setRematching(true);
+    setNotice(null);
+    try {
+      await requestRematch(room.id);
+      await loadGame();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not start the rematch.');
+      setRematching(false);
+    }
+  };
+
   if (loading) return <View style={styles.center}><ActivityIndicator color="#7CFD4D" /></View>;
   if (!room || !player) return <View style={styles.center}><Text style={styles.message}>{notice ?? 'Game unavailable.'}</Text><Pressable onPress={() => router.replace('/game-lobby')}><Text style={styles.link}>Back to home</Text></Pressable></View>;
 
-  if (room.status === 'ended') return <Leaderboard roomId={room.id} onExit={() => router.replace('/game-lobby')} />;
+  if (room.status === 'ended') return <Leaderboard isHost={isHost} isRematching={rematching} roomId={room.id} onRematch={rematch} onExit={() => router.replace('/game-lobby')} />;
+  if (room.status === 'lobby') return <View style={styles.center}><ActivityIndicator color="#7CFD4D" /><Text style={styles.message}>Preparing the rematch…</Text></View>;
   const roundNumber = round?.round_number ?? (room.current_round_id ? room.current_round + 1 : (room.current_round || 1));
 
   return (

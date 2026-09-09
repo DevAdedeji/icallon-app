@@ -1,0 +1,17 @@
+appId: com.anonymous.icallon
+name: Host starts an instant rematch
+---
+- launchApp:
+    stopApp: false
+- assertVisible:
+    id: "leaderboard-rematch"
+- tapOn:
+    id: "leaderboard-rematch"
+- extendedWaitUntil:
+    visible: "GAME LOBBY"
+    timeout: 30000
+- assertVisible: ${ROOM_CODE}
+- assertVisible: ${HOST_USERNAME}
+- assertVisible: ${GUEST_USERNAME}
+- assertVisible:
+    id: "start-game-button"

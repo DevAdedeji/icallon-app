@@ -92,3 +92,7 @@ export async function confirmRound(roundId: string): Promise<void> {
 export async function endGame(roomId: string): Promise<void> {
   await run(supabase.rpc('end_game', { requested_room_id: roomId }));
 }
+
+export async function requestRematch(roomId: string): Promise<void> {
+  await run(supabase.rpc('request_game_rematch', { requested_room_id: roomId }));
+}

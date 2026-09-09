@@ -1,0 +1,12 @@
+appId: com.anonymous.icallon
+name: Guest follows the group into a rematch
+---
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "GAME LOBBY"
+    timeout: 30000
+- assertVisible: ${ROOM_CODE}
+- assertVisible: ${HOST_USERNAME}
+- assertVisible: ${GUEST_USERNAME}
+- assertVisible: "Waiting for host to start…"
