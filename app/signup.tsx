@@ -78,7 +78,7 @@ export default function SignupScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scroll}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.kicker}>I CALL ON</Text>
+            <Text style={styles.kicker}>ICallOn</Text>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Join the game and compete</Text>
           </View>

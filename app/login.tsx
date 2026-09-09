@@ -70,7 +70,7 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scroll}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.kicker}>I CALL ON</Text>
+            <Text style={styles.kicker}>ICallOn</Text>
             <Text style={styles.title}>Login</Text>
             <Text style={styles.subtitle}>Sign in to your account to play</Text>
           </View>
