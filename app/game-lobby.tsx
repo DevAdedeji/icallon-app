@@ -1,28 +1,41 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
+import { getActiveRoomSession, type ActiveRoomSession } from '@/features/rooms/room-service';
 import { supabase } from '@/lib/supabase/client';
 
 export default function GameLobbyScreen() {
   const [name, setName] = useState('Player');
+  const [activeRoom, setActiveRoom] = useState<ActiveRoomSession | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
-      const { data } = await supabase.from('users').select('username').eq('id', user.id).maybeSingle();
-      setName(data?.username ?? user.email?.split('@')[0] ?? 'Player');
-      setLoading(false);
-    };
-    load();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const load = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+        const [{ data }, restoredRoom] = await Promise.all([
+          supabase.from('users').select('username').eq('id', user.id).maybeSingle(),
+          getActiveRoomSession().catch(() => null),
+        ]);
+        if (!active) return;
+        setName(data?.username ?? user.email?.split('@')[0] ?? 'Player');
+        setActiveRoom(restoredRoom);
+        setLoading(false);
+      };
+
+      void load();
+      return () => { active = false; };
+    }, [])
+  );
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -36,6 +49,25 @@ export default function GameLobbyScreen() {
       <Text style={styles.kicker}>READY TO PLAY</Text>
       <Text style={styles.title}>Hey, {name}.</Text>
       <Text style={styles.subtitle}>Start a new word battle or enter a friend’s room code.</Text>
+      {activeRoom && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Resume room ${activeRoom.roomCode}`}
+          testID="home-resume-room"
+          style={styles.resumeCard}
+          onPress={() => router.push({
+            pathname: activeRoom.status === 'playing' ? '/game' : '/lobby',
+            params: { roomId: activeRoom.roomId },
+          })}
+        >
+          <View style={styles.resumeIcon}><AntDesign name="sync" color="#071108" size={17} /></View>
+          <View style={styles.resumeCopy}>
+            <Text style={styles.resumeLabel}>{activeRoom.status === 'playing' ? 'GAME IN PROGRESS' : 'ROOM WAITING'}</Text>
+            <Text style={styles.resumeTitle}>Resume {activeRoom.roomCode}</Text>
+          </View>
+          <AntDesign name="right" color="#7CFD4D" size={15} />
+        </Pressable>
+      )}
       <Pressable accessibilityRole="button" testID="home-profile" style={styles.profileButton} onPress={() => router.push('/profile')}>
         <AntDesign name="user" color="#7CFD4D" size={17} />
         <Text style={styles.profileText}>Profile & game history</Text>
@@ -76,6 +108,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Fonts.sans,
   },
+  resumeCard: { minHeight: 68, marginTop: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(124,253,77,0.5)', backgroundColor: 'rgba(124,253,77,0.12)', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  resumeIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#7CFD4D', alignItems: 'center', justifyContent: 'center' },
+  resumeCopy: { flex: 1 },
+  resumeLabel: { color: '#7CFD4D', fontSize: 9, letterSpacing: 1.3, fontFamily: Fonts.mono },
+  resumeTitle: { color: '#F3FFF6', fontSize: 16, fontWeight: '900', fontFamily: Fonts.sans, marginTop: 3 },
   profileButton: { minHeight: 52, marginTop: 8, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(124,253,77,0.25)', backgroundColor: 'rgba(124,253,77,0.07)', flexDirection: 'row', alignItems: 'center', gap: 10 },
   profileText: { color: '#E6F3E8', fontSize: 14, fontWeight: '700', fontFamily: Fonts.sans, flex: 1 },
   button: {

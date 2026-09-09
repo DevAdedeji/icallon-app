@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase/client';
 import { Fonts } from '@/constants/theme';
 import { useAuth } from '@/features/auth/auth-context';
 import { startGame } from '@/features/game/game-service';
+import { useRoomPresence } from '@/features/rooms/use-room-presence';
 
 type Player = {
   id: string;
@@ -61,6 +62,10 @@ export default function LobbyScreen() {
       throw new Error('This game has already ended.');
     }
   }, [roomId, session?.user.id]);
+
+  useRoomPresence(roomId, async () => {
+    await Promise.all([loadRoom(), loadPlayers()]);
+  });
 
   // Fetch players and subscribe to real-time updates
   useEffect(() => {
@@ -173,6 +178,7 @@ export default function LobbyScreen() {
                         <Text style={styles.hostBadgeText}>HOST</Text>
                       </View>
                     )}
+                    {!p.is_connected && <Text style={styles.awayText}>AWAY</Text>}
                   </View>
                 ))}
               </View>
@@ -271,6 +277,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   hostBadgeText: { color: '#7CFD4D', fontSize: 10, fontFamily: Fonts.mono, fontWeight: '700' },
+  awayText: { color: '#F8D77A', fontSize: 9, fontFamily: Fonts.mono, letterSpacing: 1 },
   startButton: {
     height: 56,
     borderRadius: 14,
