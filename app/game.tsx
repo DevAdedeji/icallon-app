@@ -27,6 +27,7 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 export default function GameScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const { session } = useAuth();
+  const userId = session?.user.id;
   const insets = useSafeAreaInsets();
   const [room, setRoom] = useState<Room | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
@@ -43,10 +44,10 @@ export default function GameScreen() {
   const answersReady = useRef(false);
   const endRequested = useRef(false);
 
-  const isHost = Boolean(room && session?.user.id && room.host_id === session.user.id);
+  const isHost = Boolean(room && userId && room.host_id === userId);
 
   const loadGame = useCallback(async () => {
-    if (!roomId || !session?.user.id) {
+    if (!roomId || !userId) {
       setNotice('This game link is incomplete.');
       setLoading(false);
       return;
@@ -57,7 +58,7 @@ export default function GameScreen() {
       if (roomError) throw roomError;
       if (!nextRoom) throw new Error('This room is no longer available.');
 
-      const nextPlayer = await getPlayer(roomId, session.user.id);
+      const nextPlayer = await getPlayer(roomId, userId);
       if (!nextPlayer) throw new Error('You are not a player in this room.');
 
       let nextRound: Round | null = null;
@@ -75,11 +76,14 @@ export default function GameScreen() {
     } finally {
       setLoading(false);
     }
-  }, [roomId, session?.user.id]);
+  }, [roomId, userId]);
 
   useRoomPresence(roomId, loadGame);
 
-  useEffect(() => { loadGame(); }, [loadGame]);
+  useEffect(() => {
+    const task = setTimeout(() => { void loadGame(); }, 0);
+    return () => clearTimeout(task);
+  }, [loadGame]);
 
   useEffect(() => {
     if (room?.status === 'lobby') {
@@ -113,8 +117,11 @@ export default function GameScreen() {
   }, [round]);
 
   useEffect(() => {
-    if (round?.status === 'active') loadMyAnswers();
-    if (round?.status === 'submitted') loadReviewAnswers();
+    const task = setTimeout(() => {
+      if (round?.status === 'active') void loadMyAnswers();
+      if (round?.status === 'submitted') void loadReviewAnswers();
+    }, 0);
+    return () => clearTimeout(task);
   }, [round?.id, round?.status, loadMyAnswers, loadReviewAnswers]);
 
   useEffect(() => {

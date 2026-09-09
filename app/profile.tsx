@@ -59,7 +59,8 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    void loadProfile();
+    const task = setTimeout(() => { void loadProfile(); }, 0);
+    return () => clearTimeout(task);
   }, [loadProfile]);
 
   return (

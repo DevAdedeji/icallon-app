@@ -1,6 +1,6 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,8 +28,8 @@ export default function SoloScreen() {
   const params = useLocalSearchParams<{ mode?: string; pack?: string; date?: string; seed?: string }>();
   const isDaily = params.mode === 'daily';
   const dailyPack = CATEGORY_PACKS.some((item) => item.id === params.pack) ? params.pack as SoloPack : 'classic';
-  const seed = useRef(isDaily && params.seed ? params.seed : resultId()).current;
-  const persistenceId = useRef(resultId()).current;
+  const [seed] = useState(() => isDaily && params.seed ? params.seed : resultId());
+  const [persistenceId] = useState(resultId);
   const [phase, setPhase] = useState<Phase>(isDaily ? 'answering' : 'setup');
   const [pack, setPack] = useState<SoloPack>(isDaily ? dailyPack : 'classic');
   const [difficulty, setDifficulty] = useState<SoloDifficulty>(isDaily ? 'hard' : 'medium');

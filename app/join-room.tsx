@@ -17,7 +17,10 @@ export default function JoinRoomScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (invitedCode) setRoomCode(invitedCode);
+    if (!invitedCode) return;
+
+    const task = setTimeout(() => setRoomCode(invitedCode), 0);
+    return () => clearTimeout(task);
   }, [invitedCode]);
 
   const handleJoinRoom = async () => {
