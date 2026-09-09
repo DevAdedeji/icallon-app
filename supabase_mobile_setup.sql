@@ -39,6 +39,64 @@ WHERE answer.id = ranked.id AND ranked.row_number > 1;
 CREATE UNIQUE INDEX IF NOT EXISTS answers_player_round_unique
   ON public.answers (room_id, round_id, player_id);
 
+-- Track which completed game belongs to a room when the same group rematches.
+ALTER TABLE public.rooms
+  ADD COLUMN IF NOT EXISTS game_number integer NOT NULL DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS public.game_results (
+  id text PRIMARY KEY,
+  room_id text NOT NULL,
+  room_code text NOT NULL,
+  game_number integer NOT NULL,
+  max_rounds integer NOT NULL,
+  player_count integer NOT NULL,
+  completed_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT game_results_room_game_unique UNIQUE (room_id, game_number),
+  CONSTRAINT game_results_game_number_positive CHECK (game_number > 0),
+  CONSTRAINT game_results_player_count_positive CHECK (player_count > 0)
+);
+
+CREATE TABLE IF NOT EXISTS public.player_game_results (
+  id text PRIMARY KEY,
+  game_result_id text NOT NULL REFERENCES public.game_results(id) ON DELETE CASCADE,
+  user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  display_name text NOT NULL,
+  score integer NOT NULL,
+  position integer NOT NULL,
+  is_winner boolean NOT NULL,
+  created_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT player_game_results_game_user_unique UNIQUE (game_result_id, user_id),
+  CONSTRAINT player_game_results_score_nonnegative CHECK (score >= 0),
+  CONSTRAINT player_game_results_position_positive CHECK (position > 0)
+);
+
+CREATE INDEX IF NOT EXISTS player_game_results_user_history_idx
+  ON public.player_game_results (user_id, created_at DESC);
+
+ALTER TABLE public.game_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.player_game_results ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Participants can view their game results" ON public.game_results;
+CREATE POLICY "Participants can view their game results" ON public.game_results
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.player_game_results AS participant
+      WHERE participant.game_result_id = game_results.id
+        AND participant.user_id = (SELECT auth.uid())::text
+    )
+  );
+
+DROP POLICY IF EXISTS "Players can view their result rows" ON public.player_game_results;
+CREATE POLICY "Players can view their result rows" ON public.player_game_results
+  FOR SELECT TO authenticated
+  USING (user_id = (SELECT auth.uid())::text);
+
+-- History is written only by trusted game functions.
+REVOKE INSERT, UPDATE, DELETE ON public.game_results FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.player_game_results FROM anon, authenticated;
+
 -- Create the room and its host player atomically. Generating the code in the
 -- database removes the client-side check/insert race around unique room codes.
 CREATE OR REPLACE FUNCTION public.create_game_room(
@@ -575,20 +633,75 @@ SET search_path = ''
 AS $$
 DECLARE
   caller_id uuid := auth.uid();
+  room_record public.rooms%ROWTYPE;
+  result_id text;
 BEGIN
   IF caller_id IS NULL THEN
     RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
   END IF;
 
-  UPDATE public.rooms AS room
-  SET status = 'ended', ended_at = COALESCE(room.ended_at, now())
+  SELECT room.* INTO room_record
+  FROM public.rooms AS room
   WHERE room.id = requested_room_id
-    AND room.host_id = caller_id::text
-    AND room.status = 'playing';
+  FOR UPDATE;
 
-  IF NOT FOUND THEN
+  IF room_record.id IS NULL OR room_record.host_id <> caller_id::text
+    OR room_record.status NOT IN ('playing', 'ended') THEN
     RAISE EXCEPTION 'Only the host can end an active game' USING ERRCODE = '42501';
   END IF;
+
+  IF room_record.status = 'playing' THEN
+    UPDATE public.rooms AS room
+    SET status = 'ended', ended_at = COALESCE(room.ended_at, now())
+    WHERE room.id = requested_room_id
+    RETURNING room.* INTO room_record;
+  END IF;
+
+  INSERT INTO public.game_results (
+    id, room_id, room_code, game_number, max_rounds, player_count, completed_at
+  )
+  SELECT
+    gen_random_uuid()::text,
+    room_record.id,
+    room_record.code,
+    room_record.game_number,
+    room_record.max_rounds,
+    count(*)::integer,
+    COALESCE(room_record.ended_at, now())
+  FROM public.players AS player
+  WHERE player.room_id = room_record.id
+  ON CONFLICT ON CONSTRAINT game_results_room_game_unique DO NOTHING;
+
+  SELECT result.id INTO result_id
+  FROM public.game_results AS result
+  WHERE result.room_id = room_record.id
+    AND result.game_number = room_record.game_number;
+
+  INSERT INTO public.player_game_results (
+    id, game_result_id, user_id, display_name, score, position, is_winner, created_at
+  )
+  SELECT
+    gen_random_uuid()::text,
+    result_id,
+    ranked.user_id,
+    ranked.display_name,
+    ranked.total_score,
+    ranked.position,
+    ranked.position = 1,
+    COALESCE(room_record.ended_at, now())
+  FROM (
+    SELECT
+      player.user_id,
+      player.display_name,
+      player.total_score,
+      row_number() OVER (
+        ORDER BY player.total_score DESC, player.joined_at ASC, player.id ASC
+      )::integer AS position
+    FROM public.players AS player
+    WHERE player.room_id = room_record.id
+      AND player.user_id IS NOT NULL
+  ) AS ranked
+  ON CONFLICT (game_result_id, user_id) DO NOTHING;
 
   RETURN QUERY SELECT requested_room_id, 'ended'::text;
 END;
@@ -596,3 +709,105 @@ $$;
 
 REVOKE ALL ON FUNCTION public.end_game(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.end_game(text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_my_game_stats()
+RETURNS TABLE (
+  games_played bigint,
+  wins bigint,
+  total_points bigint,
+  best_score integer,
+  current_win_streak bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  WITH ordered_results AS (
+    SELECT
+      result.is_winner,
+      row_number() OVER (
+        ORDER BY game.completed_at DESC, result.id DESC
+      ) AS recent_position
+    FROM public.player_game_results AS result
+    JOIN public.game_results AS game ON game.id = result.game_result_id
+    WHERE result.user_id = auth.uid()::text
+  ), totals AS (
+    SELECT
+      count(*) AS games_played,
+      count(*) FILTER (WHERE result.is_winner) AS wins,
+      COALESCE(sum(result.score), 0) AS total_points,
+      COALESCE(max(result.score), 0) AS best_score
+    FROM public.player_game_results AS result
+    WHERE result.user_id = auth.uid()::text
+  )
+  SELECT
+    totals.games_played,
+    totals.wins,
+    totals.total_points,
+    totals.best_score,
+    COALESCE(
+      (SELECT min(recent_position) - 1 FROM ordered_results WHERE NOT is_winner),
+      (SELECT count(*) FROM ordered_results)
+    ) AS current_win_streak
+  FROM totals;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_my_game_stats() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_my_game_stats() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_my_match_history(requested_limit integer DEFAULT 20)
+RETURNS TABLE (
+  game_result_id text,
+  room_code text,
+  game_number integer,
+  completed_at timestamp,
+  score integer,
+  placement integer,
+  is_winner boolean,
+  player_count integer,
+  winner_name text,
+  winner_score integer
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  bounded_limit integer := least(greatest(COALESCE(requested_limit, 20), 1), 50);
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    game.id,
+    game.room_code,
+    game.game_number,
+    game.completed_at,
+    mine.score,
+    mine.position,
+    mine.is_winner,
+    game.player_count,
+    winner.display_name,
+    winner.score
+  FROM public.player_game_results AS mine
+  JOIN public.game_results AS game ON game.id = mine.game_result_id
+  JOIN LATERAL (
+    SELECT result.display_name, result.score
+    FROM public.player_game_results AS result
+    WHERE result.game_result_id = game.id
+    ORDER BY result.position ASC
+    LIMIT 1
+  ) AS winner ON true
+  WHERE mine.user_id = caller_id::text
+  ORDER BY game.completed_at DESC, game.id DESC
+  LIMIT bounded_limit;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_my_match_history(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_my_match_history(integer) TO authenticated;
