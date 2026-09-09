@@ -31,6 +31,11 @@ type ActiveRoomRow = {
   current_round_id: string | null;
 };
 
+type MatchmakingRow = CreateRoomRow & {
+  is_host: boolean;
+  matched_existing: boolean;
+};
+
 function roomError(error: unknown): Error {
   const message = error instanceof Error
     ? error.message
@@ -101,4 +106,18 @@ export async function setRoomPresence(roomId: string, connected: boolean): Promi
     requested_connected: connected,
   });
   if (error) throw roomError(error);
+}
+
+export async function joinPublicMatchmaking(categoryPack: string): Promise<RoomSession & { matchedExisting: boolean }> {
+  const { data, error } = await supabase
+    .rpc('join_public_matchmaking', { requested_category_pack: categoryPack })
+    .single<MatchmakingRow>();
+  if (error) throw roomError(error);
+  if (!data?.room_id || !data.room_code) throw new Error('Quick Match could not create a valid room.');
+  return {
+    roomId: data.room_id,
+    roomCode: data.room_code,
+    isHost: data.is_host,
+    matchedExisting: data.matched_existing,
+  };
 }

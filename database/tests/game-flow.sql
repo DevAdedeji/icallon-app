@@ -1,6 +1,7 @@
 INSERT INTO public.users (id, email, username) VALUES
   ('11111111-1111-1111-1111-111111111111', 'host@example.test', 'Host'),
-  ('22222222-2222-2222-2222-222222222222', 'player@example.test', 'Player');
+  ('22222222-2222-2222-2222-222222222222', 'player@example.test', 'Player'),
+  ('33333333-3333-3333-3333-333333333333', 'match@example.test', 'MatchPlayer');
 
 DO $$
 DECLARE
@@ -10,6 +11,8 @@ DECLARE
   joined_player_id text;
   player_answer_id text;
   returned_points integer;
+  public_room_id text;
+  matched_public_room_id text;
 BEGIN
   PERFORM set_config('request.jwt.claim.role', 'authenticated', false);
   PERFORM set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
@@ -44,6 +47,13 @@ BEGIN
     RAISE EXCEPTION 'Solo result persistence was not idempotent';
   END IF;
 
+  SELECT match.room_id INTO public_room_id
+  FROM public.join_public_matchmaking('food') AS match;
+  IF NOT (SELECT is_public FROM public.rooms WHERE id = public_room_id)
+    OR (SELECT max_players FROM public.rooms WHERE id = public_room_id) <> 4 THEN
+    RAISE EXCEPTION 'Public matchmaking did not create a bounded public room';
+  END IF;
+
   IF (SELECT challenge.completed FROM public.get_daily_challenge() AS challenge) THEN
     RAISE EXCEPTION 'Fresh daily challenge was unexpectedly complete';
   END IF;
@@ -55,6 +65,14 @@ BEGIN
   IF NOT (SELECT challenge.completed FROM public.get_daily_challenge() AS challenge)
     OR (SELECT challenge.player_score FROM public.get_daily_challenge() AS challenge) <> 100 THEN
     RAISE EXCEPTION 'Daily challenge completion was not returned';
+  END IF;
+
+  PERFORM set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', false);
+  SELECT match.room_id INTO matched_public_room_id
+  FROM public.join_public_matchmaking('food') AS match;
+  IF matched_public_room_id <> public_room_id
+    OR (SELECT count(*) FROM public.players WHERE room_id = public_room_id) <> 2 THEN
+    RAISE EXCEPTION 'Compatible public room was not filled before creating another';
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);

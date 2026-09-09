@@ -50,6 +50,12 @@ ALTER TABLE public.rooms
   ADD COLUMN IF NOT EXISTS category_labels jsonb NOT NULL
   DEFAULT '["Name", "Animal", "Place", "Thing"]'::jsonb;
 
+ALTER TABLE public.rooms
+  ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT false;
+
+ALTER TABLE public.rooms
+  ADD COLUMN IF NOT EXISTS max_players integer NOT NULL DEFAULT 8;
+
 ALTER TABLE public.players
   ADD COLUMN IF NOT EXISTS last_seen_at timestamp NOT NULL DEFAULT now();
 
@@ -341,6 +347,8 @@ DECLARE
   matched_room_code text;
   matched_room_host_id text;
   matched_room_status text;
+  matched_room_max_players integer;
+  matched_room_player_count integer;
   joined_player_id text;
   joined_is_host boolean;
   profile_name text;
@@ -352,8 +360,8 @@ BEGIN
     RAISE EXCEPTION 'Invalid room code' USING ERRCODE = '22023';
   END IF;
 
-  SELECT room.id, room.code, room.host_id, room.status
-  INTO matched_room_id, matched_room_code, matched_room_host_id, matched_room_status
+  SELECT room.id, room.code, room.host_id, room.status, room.max_players
+  INTO matched_room_id, matched_room_code, matched_room_host_id, matched_room_status, matched_room_max_players
   FROM public.rooms AS room
   WHERE room.code = upper(trim(requested_room_code))
   FOR UPDATE;
@@ -363,6 +371,18 @@ BEGIN
   END IF;
   IF matched_room_status = 'ended' THEN
     RAISE EXCEPTION 'Room has ended' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT count(*)::integer INTO matched_room_player_count
+  FROM public.players AS player
+  WHERE player.room_id = matched_room_id;
+
+  IF matched_room_player_count >= matched_room_max_players
+    AND NOT EXISTS (
+      SELECT 1 FROM public.players AS player
+      WHERE player.room_id = matched_room_id AND player.user_id = caller_id::text
+    ) THEN
+    RAISE EXCEPTION 'Room is full' USING ERRCODE = '55000';
   END IF;
 
   SELECT profile.username
@@ -397,6 +417,91 @@ $$;
 
 REVOKE ALL ON FUNCTION public.join_game_room(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.join_game_room(text) TO authenticated;
+
+-- Place a player into the oldest compatible public lobby, or create one. The
+-- advisory lock serializes allocation per pack so concurrent joins cannot
+-- overfill a room or unnecessarily create multiple rooms.
+CREATE OR REPLACE FUNCTION public.join_public_matchmaking(requested_category_pack text)
+RETURNS TABLE (room_id text, room_code text, is_host boolean, matched_existing boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  caller_id uuid := auth.uid();
+  normalized_pack text := lower(trim(requested_category_pack));
+  profile_name text;
+  matched_room_id text;
+  matched_room_code text;
+  created_room record;
+  labels jsonb;
+BEGIN
+  IF caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
+  END IF;
+  IF normalized_pack NOT IN ('classic', 'world', 'food', 'entertainment') THEN
+    RAISE EXCEPTION 'Invalid category pack' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext('icallon:matchmaking:' || normalized_pack));
+
+  SELECT profile.username INTO profile_name
+  FROM public.users AS profile
+  WHERE profile.id = caller_id::text;
+  IF profile_name IS NULL THEN
+    RAISE EXCEPTION 'Player profile not found' USING ERRCODE = '23503';
+  END IF;
+
+  SELECT room.id, room.code
+  INTO matched_room_id, matched_room_code
+  FROM public.rooms AS room
+  WHERE room.is_public
+    AND room.status = 'lobby'
+    AND room.category_pack = normalized_pack
+    AND NOT EXISTS (
+      SELECT 1 FROM public.players AS mine
+      WHERE mine.room_id = room.id AND mine.user_id = caller_id::text
+    )
+    AND (SELECT count(*) FROM public.players AS participant WHERE participant.room_id = room.id) < room.max_players
+  ORDER BY room.created_at ASC, room.id ASC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF matched_room_id IS NOT NULL THEN
+    INSERT INTO public.players (
+      id, room_id, user_id, display_name, is_host, total_score, is_connected
+    ) VALUES (
+      gen_random_uuid()::text, matched_room_id, caller_id::text,
+      profile_name, false, 0, true
+    )
+    ON CONFLICT ON CONSTRAINT unique_player_per_room
+    DO UPDATE SET is_connected = true, last_seen_at = now();
+
+    RETURN QUERY SELECT matched_room_id, matched_room_code, false, true;
+    RETURN;
+  END IF;
+
+  labels := CASE normalized_pack
+    WHEN 'world' THEN '["Country", "City", "Landmark", "Language"]'::jsonb
+    WHEN 'food' THEN '["Food", "Drink", "Ingredient", "Restaurant"]'::jsonb
+    WHEN 'entertainment' THEN '["Movie", "Song", "Celebrity", "Character"]'::jsonb
+    ELSE '["Name", "Animal", "Place", "Thing"]'::jsonb
+  END;
+
+  SELECT created.room_id, created.room_code, created.is_host
+  INTO created_room
+  FROM public.create_game_room_v2(3, 60, normalized_pack, labels) AS created;
+
+  UPDATE public.rooms AS room
+  SET is_public = true, max_players = 4
+  WHERE room.id = created_room.room_id;
+
+  RETURN QUERY SELECT created_room.room_id::text, created_room.room_code::text, true, false;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.join_public_matchmaking(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.join_public_matchmaking(text) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.get_my_active_room()
 RETURNS TABLE (

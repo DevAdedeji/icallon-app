@@ -35,6 +35,8 @@ CREATE TABLE public.rooms (
   current_round_id text,
   category_pack text NOT NULL DEFAULT 'classic',
   category_labels jsonb NOT NULL DEFAULT '["Name", "Animal", "Place", "Thing"]'::jsonb,
+  is_public boolean NOT NULL DEFAULT false,
+  max_players integer NOT NULL DEFAULT 8,
   created_at timestamp NOT NULL DEFAULT now(),
   started_at timestamp,
   ended_at timestamp

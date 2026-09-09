@@ -12,6 +12,8 @@ export type Room = {
   game_number: number;
   category_pack: string;
   category_labels: string[];
+  is_public: boolean;
+  max_players: number;
   started_at: string | null;
 };
 
