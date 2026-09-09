@@ -7,5 +7,8 @@ name: Guest receives final leaderboard
     visible:
       id: "leaderboard"
     timeout: 30000
+- assertVisible:
+    id: "leaderboard-confetti"
+- assertVisible: "CHAMPION"
 - assertVisible: ${GUEST_USERNAME}
 - assertVisible: "120"

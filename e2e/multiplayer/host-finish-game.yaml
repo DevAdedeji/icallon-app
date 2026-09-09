@@ -48,5 +48,8 @@ name: Host completes final round
     visible:
       id: "leaderboard"
     timeout: 30000
+- assertVisible:
+    id: "leaderboard-confetti"
+- assertVisible: "CHAMPION"
 - assertVisible: ${GUEST_USERNAME}
 - assertVisible: "120"

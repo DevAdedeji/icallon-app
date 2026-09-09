@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
 import { supabase } from '@/lib/supabase/client';
@@ -42,6 +43,7 @@ export default function GameLobbyScreen() {
         <Text style={styles.buttonText}>Join Room</Text>
       </Pressable>
       <Pressable accessibilityRole="button" testID="home-sign-out" style={styles.signOutButton} onPress={signOut}>
+        <AntDesign name="logout" color="#FF6B6B" size={15} />
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
     </View>
@@ -87,6 +89,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: Fonts.sans,
   },
-  signOutButton: { alignSelf: 'center', padding: 12 },
-  signOutText: { color: '#9CB7A1', fontSize: 14, fontFamily: Fonts.sans },
+  signOutButton: { alignSelf: 'center', minHeight: 44, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  signOutText: { color: '#FF6B6B', fontSize: 14, fontWeight: '700', fontFamily: Fonts.sans, textDecorationLine: 'underline', textDecorationColor: '#FF6B6B' },
 });
