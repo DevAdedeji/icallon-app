@@ -111,8 +111,8 @@ export function Leaderboard({ isHost, isRematching, onRematch, roomId, onExit }:
         ) : (
           <Text style={styles.rematchWaiting}>The host can start a rematch with this group.</Text>
         )}
-        <Pressable accessibilityRole="button" testID="leaderboard-exit" style={styles.button} onPress={onExit}>
-          <Text style={styles.buttonText}>Back to home</Text>
+        <Pressable accessibilityRole="button" testID="leaderboard-exit" style={styles.homeButton} onPress={onExit}>
+          <Text style={styles.homeButtonText}>Back to home</Text>
         </Pressable>
       </View>
     </View>
@@ -305,11 +305,13 @@ const styles = StyleSheet.create({
     fontSize: 7,
     letterSpacing: 1,
   },
-  button: {
+  homeButton: {
     minHeight: 54,
     marginTop: 10,
     borderRadius: 14,
-    backgroundColor: '#7CFD4D',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(243,255,246,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -338,10 +340,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   disabled: { opacity: 0.55 },
-  buttonText: {
-    color: '#071108',
+  homeButtonText: {
+    color: '#F3FFF6',
     fontFamily: Fonts.sans,
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: '800',
   },
 });
