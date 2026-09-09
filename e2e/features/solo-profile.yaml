@@ -1,0 +1,68 @@
+appId: com.anonymous.icallon
+name: Solo mode and progression
+---
+- openLink: "icallon://game-lobby"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "home-solo"
+    timeout: 15000
+- tapOn:
+    id: "home-solo"
+- tapOn:
+    id: "solo-difficulty-easy"
+- scrollUntilVisible:
+    element:
+      id: "solo-start"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "solo-start"
+- repeat:
+    times: 3
+    commands:
+      - assertVisible:
+          id: "solo-letter"
+      - scrollUntilVisible:
+          element:
+            id: "solo-submit"
+          direction: DOWN
+          timeout: 10000
+      - tapOn:
+          id: "solo-submit"
+      - scrollUntilVisible:
+          element:
+            id: "solo-next"
+          direction: DOWN
+          timeout: 10000
+      - tapOn:
+          id: "solo-next"
+- assertVisible:
+    id: "solo-result-title"
+- openLink: "icallon://game-lobby"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "home-profile"
+    timeout: 15000
+- tapOn:
+    id: "home-profile"
+- extendedWaitUntil:
+    visible:
+      id: "profile-level"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "profile-achievements"
+    direction: DOWN
+    timeout: 10000
+- assertVisible:
+    id: "profile-achievements"

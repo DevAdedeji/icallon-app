@@ -1,0 +1,56 @@
+appId: com.anonymous.icallon
+name: Daily challenge
+---
+- openLink: "icallon://game-lobby"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "home-daily"
+    timeout: 15000
+- tapOn:
+    id: "home-daily"
+- extendedWaitUntil:
+    visible:
+      id: "daily-card"
+    timeout: 15000
+- runFlow:
+    when:
+      visible:
+        id: "daily-start"
+    commands:
+      - tapOn:
+          id: "daily-start"
+      - repeat:
+          times: 3
+          commands:
+            - scrollUntilVisible:
+                element:
+                  id: "solo-submit"
+                direction: DOWN
+                timeout: 10000
+            - tapOn:
+                id: "solo-submit"
+            - scrollUntilVisible:
+                element:
+                  id: "solo-next"
+                direction: DOWN
+                timeout: 10000
+            - tapOn:
+                id: "solo-next"
+      - assertVisible:
+          id: "solo-result-title"
+      - waitForAnimationToEnd
+      - openLink: "icallon://daily"
+      - runFlow:
+          when:
+            visible: "Open"
+          commands:
+            - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "daily-completed"
+    timeout: 20000

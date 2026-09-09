@@ -1,0 +1,38 @@
+appId: com.anonymous.icallon
+name: Category pack room
+---
+- openLink: "icallon://game-lobby"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "home-create-room"
+    timeout: 15000
+- tapOn:
+    id: "home-create-room"
+- tapOn:
+    id: "category-pack-food"
+- scrollUntilVisible:
+    element:
+      id: "round-option-3"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "round-option-3"
+- tapOn:
+    id: "timer-option-60"
+- scrollUntilVisible:
+    element:
+      id: "create-room-submit"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "create-room-submit"
+- extendedWaitUntil:
+    visible:
+      id: "lobby-category-pack"
+    timeout: 20000
+- assertVisible: "Food fight"

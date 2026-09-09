@@ -1,0 +1,24 @@
+appId: com.anonymous.icallon
+name: Public matchmaking guest
+---
+- openLink: "icallon://game-lobby"
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- extendedWaitUntil:
+    visible:
+      id: "home-quick-match"
+    timeout: 15000
+- tapOn:
+    id: "home-quick-match"
+- tapOn:
+    id: "matchmaking-pack-entertainment"
+- tapOn:
+    id: "find-match"
+- extendedWaitUntil:
+    visible:
+      id: "public-room-badge"
+    timeout: 20000
+- assertVisible: "Waiting for host to start…"

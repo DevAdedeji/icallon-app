@@ -1,0 +1,12 @@
+appId: com.anonymous.icallon
+name: Public match starts
+---
+- launchApp:
+    stopApp: false
+- assertVisible:
+    id: "start-game-button"
+- tapOn:
+    id: "start-game-button"
+- extendedWaitUntil:
+    visible: "Choose a letter"
+    timeout: 15000

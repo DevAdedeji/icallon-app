@@ -27,9 +27,10 @@ name: Host starts an instant rematch
     timeout: 15000
 - tapOn:
     id: "home-profile"
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: "profile-history"
+    direction: DOWN
     timeout: 15000
 - tapOn:
     id: "profile-back"
