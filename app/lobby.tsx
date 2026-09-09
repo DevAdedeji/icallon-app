@@ -125,6 +125,9 @@ export default function LobbyScreen() {
     setError(null);
     try {
       await startGame(roomId);
+      // Do not depend on a realtime event to transition the initiating host.
+      // A reconnecting channel can legitimately deliver the update late.
+      await loadRoom();
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : 'Failed to start game.');
     } finally {
