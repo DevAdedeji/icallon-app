@@ -52,7 +52,8 @@ provision_user() {
   local error_code
 
   response_file="$(mktemp /private/tmp/icallon-auth-response.XXXXXX)"
-  response_code="$(curl -sS -o "${response_file}" -w '%{http_code}' \
+  response_code="$(curl -sS --retry 4 --retry-all-errors --connect-timeout 10 \
+    -o "${response_file}" -w '%{http_code}' \
     "${project_url}/auth/v1/signup" \
     -H "apikey: ${public_key}" \
     -H "Content-Type: application/json" \
@@ -94,6 +95,9 @@ fi
 
 dev_client_url="${E2E_DEV_CLIENT_URL:-exp+icallon://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A19000}"
 artifact_root="${E2E_ARTIFACT_DIR:-artifacts/multiplayer-ios}"
+if [[ "${artifact_root}" != /* ]]; then
+  artifact_root="$(pwd)/${artifact_root}"
+fi
 mkdir -p "${artifact_root}"
 
 run_flow() {
