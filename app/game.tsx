@@ -40,6 +40,7 @@ export default function GameScreen() {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submittingAnswers, setSubmittingAnswers] = useState(false);
   const [rematching, setRematching] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -217,8 +218,7 @@ export default function GameScreen() {
   useEffect(() => {
     if (!round || !player || round.status !== 'active' || !answersReady.current || hasSubmitted) return;
     const timer = setTimeout(() => {
-      setSaving(true);
-      saveGameAnswers(roomId, round.id, answers).catch(error => setNotice(error.message)).finally(() => setSaving(false));
+      saveGameAnswers(roomId, round.id, answers).catch(error => setNotice(error.message));
     }, 700);
     return () => clearTimeout(timer);
   }, [answers, hasSubmitted, player, roomId, round]);
@@ -234,8 +234,8 @@ export default function GameScreen() {
   };
 
   const submitAnswers = async () => {
-    if (!round || !player) return;
-    setSaving(true);
+    if (!round || !player || saving || submittingAnswers) return;
+    setSubmittingAnswers(true);
     try {
       if (!hasSubmitted) {
         await saveGameAnswers(roomId, round.id, answers, true);
@@ -245,11 +245,11 @@ export default function GameScreen() {
         ? 'Answers submitted. Waiting for automatic scoring.'
         : 'Answers submitted. Waiting for the host to review.');
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not submit answers'); }
-    finally { setSaving(false); }
+    finally { setSubmittingAnswers(false); }
   };
 
   const finishSubmissions = async () => {
-    if (!round || !player || !isHost || saving) return;
+    if (!round || !player || !isHost || saving || submittingAnswers) return;
     setSaving(true);
     try {
       // Persist the host's current input before the database promotes every
@@ -351,7 +351,7 @@ export default function GameScreen() {
         keyboardShouldPersistTaps="handled">
         {notice && <Pressable style={styles.notice} onPress={() => setNotice(null)}><Text style={styles.noticeText}>{notice}</Text></Pressable>}
         {!round && <LetterPicker number={roundNumber} isHost={isHost} isPublic={room.is_public} onPick={chooseLetter} busy={saving} />}
-        {round?.status === 'active' && <AnswerEntry categories={categories} round={round} answers={answers} onChange={setAnswers} secondsLeft={secondsLeft} saving={saving} submitted={hasSubmitted} isHost={isHost} isPublic={room.is_public} onSubmit={submitAnswers} onEnd={finishSubmissions} />}
+        {round?.status === 'active' && <AnswerEntry categories={categories} round={round} answers={answers} onChange={setAnswers} secondsLeft={secondsLeft} submitting={submittingAnswers} closing={saving} submitted={hasSubmitted} isHost={isHost} isPublic={room.is_public} onSubmit={submitAnswers} onEnd={finishSubmissions} />}
         {round?.status === 'submitted' && <Review categories={categories} round={round} answers={reviewAnswers} isHost={isHost} onValidate={validate} onConfirm={confirmReview} busy={saving} />}
         {round?.status === 'ended' && (round.round_number >= room.max_rounds
           ? <RoundComplete isHost={isHost} final onFinish={endGame} />
@@ -369,7 +369,7 @@ function LetterPicker({ number, isHost, isPublic, onPick, busy }: { number: numb
   return <View><Text style={styles.kicker}>ROUND {number}</Text><Text style={styles.title}>Choose a letter</Text><Text style={styles.subtitle}>Everyone’s answers must start with this letter.</Text><View style={styles.letters}>{LETTERS.map(letter => <Pressable accessibilityRole="button" testID={`letter-option-${letter}`} disabled={busy} key={letter} onPress={() => onPick(letter)} style={styles.letter}><View style={styles.letterGlyph}><Text style={[styles.letterText, styles.centeredLetterText]}>{letter}</Text></View></Pressable>)}</View></View>;
 }
 
-function AnswerEntry({ categories, round, answers, onChange, secondsLeft, saving, submitted, isHost, isPublic, onSubmit, onEnd }: { categories: ReturnType<typeof categoryEntries>; round: Round; answers: AnswerValues; onChange: (next: AnswerValues) => void; secondsLeft: number; saving: boolean; submitted: boolean; isHost: boolean; isPublic: boolean; onSubmit: () => void; onEnd: () => void }) {
+export function AnswerEntry({ categories, round, answers, onChange, secondsLeft, submitting, closing, submitted, isHost, isPublic, onSubmit, onEnd }: { categories: ReturnType<typeof categoryEntries>; round: Round; answers: AnswerValues; onChange: (next: AnswerValues) => void; secondsLeft: number; submitting: boolean; closing: boolean; submitted: boolean; isHost: boolean; isPublic: boolean; onSubmit: () => void; onEnd: () => void }) {
   const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
   const [letterEntrance] = useState(() => new Animated.Value(0.65));
   const [timerPulse] = useState(() => new Animated.Value(1));
@@ -386,7 +386,8 @@ function AnswerEntry({ categories, round, answers, onChange, secondsLeft, saving
     ]).start();
   }, [secondsLeft, timerPulse]);
 
-  return <View><View style={styles.gameHeader}><View><Text style={styles.kicker}>LETTER</Text><Animated.Text style={[styles.bigLetter, { transform: [{ scale: letterEntrance }] }]}>{round.letter}</Animated.Text></View><Animated.View style={[styles.timer, secondsLeft <= 10 && styles.timerDanger, { transform: [{ scale: timerPulse }] }]}><Text style={styles.timerText}>{clock}</Text></Animated.View></View><Text style={styles.subtitle}>{submitted ? `Answers submitted. Waiting for ${isPublic ? 'scoring' : 'review'}.` : 'Enter one answer for each category. Answers save automatically.'}</Text><View style={styles.fields}>{categories.map(({ key, label }) => <View key={key}><Text style={styles.label}>{label}</Text><TextInput testID={`answer-${key}`} value={answers[key]} onChangeText={text => onChange({ ...answers, [key]: text })} autoCapitalize="words" autoCorrect={false} editable={secondsLeft > 0 && !submitted} placeholder={`${label} starting with ${round.letter}`} placeholderTextColor="#6C806F" style={[styles.input, submitted && styles.disabled]} /></View>)}</View><Pressable accessibilityRole="button" testID="submit-answers-button" disabled={saving || secondsLeft === 0 || submitted} onPress={onSubmit} style={[styles.primaryButton, (saving || secondsLeft === 0 || submitted) && styles.disabled]}>{saving ? <ActivityIndicator color="#071108" /> : <Text style={styles.primaryText}>{submitted ? 'Answers submitted' : 'Submit answers'}</Text>}</Pressable>{isHost && <Pressable accessibilityRole="button" testID="close-submissions-button" disabled={saving} onPress={onEnd} style={[styles.secondaryButton, saving && styles.disabled]}><Text style={styles.secondaryText}>{isPublic ? 'End submissions & score' : 'End submissions & review'}</Text></Pressable>}</View>;
+  const actionsBusy = submitting || closing;
+  return <View><View style={styles.gameHeader}><View><Text style={styles.kicker}>LETTER</Text><Animated.Text style={[styles.bigLetter, { transform: [{ scale: letterEntrance }] }]}>{round.letter}</Animated.Text></View><Animated.View style={[styles.timer, secondsLeft <= 10 && styles.timerDanger, { transform: [{ scale: timerPulse }] }]}><Text style={styles.timerText}>{clock}</Text></Animated.View></View><Text style={styles.subtitle}>{submitted ? `Answers submitted. Waiting for ${isPublic ? 'scoring' : 'review'}.` : 'Enter one answer for each category. Answers save automatically.'}</Text><View style={styles.fields}>{categories.map(({ key, label }) => <View key={key}><Text style={styles.label}>{label}</Text><TextInput testID={`answer-${key}`} value={answers[key]} onChangeText={text => onChange({ ...answers, [key]: text })} autoCapitalize="words" autoCorrect={false} editable={secondsLeft > 0 && !submitted} placeholder={`${label} starting with ${round.letter}`} placeholderTextColor="#6C806F" style={[styles.input, submitted && styles.disabled]} /></View>)}</View><Pressable accessibilityRole="button" testID="submit-answers-button" disabled={actionsBusy || secondsLeft === 0 || submitted} onPress={onSubmit} style={[styles.primaryButton, (actionsBusy || secondsLeft === 0 || submitted) && styles.disabled]}>{submitting ? <ActivityIndicator testID="submit-answers-spinner" color="#071108" /> : <Text style={styles.primaryText}>{submitted ? 'Answers submitted' : 'Submit answers'}</Text>}</Pressable>{isHost && <Pressable accessibilityRole="button" testID="close-submissions-button" disabled={actionsBusy} onPress={onEnd} style={[styles.secondaryButton, actionsBusy && styles.disabled]}>{closing ? <ActivityIndicator testID="close-submissions-spinner" color="#E6F3E8" /> : <Text style={styles.secondaryText}>{isPublic ? 'End submissions & score' : 'End submissions & review'}</Text>}</Pressable>}</View>;
 }
 
 function Review({ categories, round, answers, isHost, onValidate, onConfirm, busy }: { categories: ReturnType<typeof categoryEntries>; round: Round; answers: GameAnswer[]; isHost: boolean; onValidate: (answer: GameAnswer, category: keyof AnswerValues, valid: boolean) => void; onConfirm: () => void; busy: boolean }) {

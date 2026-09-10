@@ -1,5 +1,5 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 import { Fonts } from '@/constants/theme';
 import { CATEGORY_PACKS, categoryPackName, type CategoryPackId } from '@/features/game/category-packs';
+import { ENABLE_PAUSED_GAME_MODES } from '@/features/game/game-modes';
 import {
   createPublicMatchRoom,
   joinPublicMatchRoom,
@@ -23,7 +24,12 @@ function waitingTime(createdAt: string): string {
   return `waiting ${minutes} mins`;
 }
 
-export default function MatchmakingScreen() {
+export default function MatchmakingRoute() {
+  if (!ENABLE_PAUSED_GAME_MODES) return <Redirect href="/game-lobby" />;
+  return <MatchmakingScreen />;
+}
+
+function MatchmakingScreen() {
   const insets = useSafeAreaInsets();
   const [pack, setPack] = useState<MatchmakingPack>('classic');
   const [rooms, setRooms] = useState<PublicMatchRoom[]>([]);

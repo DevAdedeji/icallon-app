@@ -7,6 +7,7 @@ describe('player progression', () => {
     const achievements = achievementsFor(progression);
     expect(achievements.find((item) => item.id === 'champion')?.unlocked).toBe(true);
     expect(achievements.find((item) => item.id === 'century')?.unlocked).toBe(true);
-    expect(achievements.find((item) => item.id === 'regular')).toMatchObject({ progress: 4, target: 10, unlocked: false });
+    expect(achievements.find((item) => item.id === 'regular')).toMatchObject({ progress: 2, target: 10, unlocked: false });
+    expect(achievements.some((item) => item.id === 'cpu-crusher' || item.id === 'daily-player')).toBe(false);
   });
 });

@@ -1,11 +1,12 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
 import { CATEGORY_PACKS, categoryEntries, type CategoryPackId } from '@/features/game/category-packs';
+import { ENABLE_PAUSED_GAME_MODES } from '@/features/game/game-modes';
 import { computerAnswers, scoreSoloRound, SOLO_MODE_RULES, soloLetters, type SoloDifficulty, type SoloRoundScore } from '@/features/solo/solo-engine';
 import { recordSoloResult } from '@/features/solo/solo-service';
 import { EMPTY_ANSWERS, type AnswerValues } from '@/lib/game';
@@ -25,7 +26,12 @@ function resultId(): string {
   return `solo-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export default function SoloScreen() {
+export default function SoloRoute() {
+  if (!ENABLE_PAUSED_GAME_MODES) return <Redirect href="/game-lobby" />;
+  return <SoloScreen />;
+}
+
+function SoloScreen() {
   const { playSound } = useGameFeedback();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string; pack?: string; date?: string; seed?: string }>();
