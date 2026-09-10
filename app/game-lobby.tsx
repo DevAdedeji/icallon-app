@@ -1,13 +1,16 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import AntDesign from '@expo/vector-icons/AntDesign';
 
 import { Fonts } from '@/constants/theme';
 import { getActiveRoomSession, type ActiveRoomSession } from '@/features/rooms/room-service';
 import { supabase } from '@/lib/supabase/client';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
+import { useGameFeedback } from '@/features/feedback/game-feedback';
 
 export default function GameLobbyScreen() {
+  const { soundEnabled, toggleSound } = useGameFeedback();
   const [name, setName] = useState('Player');
   const [activeRoom, setActiveRoom] = useState<ActiveRoomSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,9 +49,13 @@ export default function GameLobbyScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.kicker}>READY TO PLAY</Text>
+      <Text style={styles.kicker}>MULTIPLAYER WORD BATTLE</Text>
       <Text style={styles.title}>Hey, {name}.</Text>
-      <Text style={styles.subtitle}>Start a new word battle or enter a friend’s room code.</Text>
+      <Text style={styles.subtitle}>Bring your people together, race the clock, and decide which answers deserve the points.</Text>
+      <Pressable accessibilityRole="switch" accessibilityState={{ checked: soundEnabled }} style={styles.soundButton} onPress={toggleSound}>
+        <AntDesign name={soundEnabled ? 'sound' : 'sound'} color={soundEnabled ? '#7CFD4D' : '#78917D'} size={16} />
+        <Text style={[styles.soundText, !soundEnabled && styles.soundTextMuted]}>Game sounds {soundEnabled ? 'on' : 'off'}</Text>
+      </Pressable>
       {activeRoom && (
         <Pressable
           accessibilityRole="button"
@@ -73,29 +80,11 @@ export default function GameLobbyScreen() {
         <Text style={styles.profileText}>Profile & game history</Text>
         <AntDesign name="right" color="#9CB7A1" size={14} />
       </Pressable>
-      <Pressable accessibilityRole="button" testID="home-solo" style={styles.soloButton} onPress={() => router.push('/solo')}>
-        <View style={styles.soloIcon}><AntDesign name="thunderbolt" color="#071108" size={17} /></View>
-        <View style={styles.soloCopy}>
-          <Text style={styles.soloTitle}>Play solo</Text>
-          <Text style={styles.soloSubtitle}>Take on the computer</Text>
-        </View>
-        <AntDesign name="right" color="#7CFD4D" size={14} />
-      </Pressable>
-      <Pressable accessibilityRole="button" testID="home-daily" style={styles.dailyButton} onPress={() => router.push('/daily')}>
-        <AntDesign name="calendar" color="#F8D77A" size={18} />
-        <View style={styles.soloCopy}><Text style={styles.soloTitle}>Daily challenge</Text><Text style={styles.soloSubtitle}>One shared puzzle every day</Text></View>
-        <AntDesign name="right" color="#F8D77A" size={14} />
-      </Pressable>
-      <Pressable accessibilityRole="button" testID="home-quick-match" style={styles.quickMatchButton} onPress={() => router.push('/matchmaking')}>
-        <AntDesign name="global" color="#70C8FF" size={18} />
-        <View style={styles.soloCopy}><Text style={styles.soloTitle}>Quick Match</Text><Text style={styles.soloSubtitle}>Play with people online</Text></View>
-        <AntDesign name="right" color="#70C8FF" size={14} />
-      </Pressable>
       <Pressable accessibilityRole="button" testID="home-create-room" style={styles.primaryButton} onPress={() => router.push('/create-room')}>
-        <Text style={styles.primaryText}>Create Room</Text>
+        <Text style={styles.primaryText}>Create a room</Text>
       </Pressable>
       <Pressable accessibilityRole="button" testID="home-join-room" style={styles.button} onPress={() => router.push('/join-room')}>
-        <Text style={styles.buttonText}>Join Room</Text>
+        <Text style={styles.buttonText}>Join with a room code</Text>
       </Pressable>
       <Pressable accessibilityRole="button" testID="home-sign-out" style={styles.signOutButton} onPress={signOut}>
         <AntDesign name="logout" color="#FF6B6B" size={15} />
@@ -126,6 +115,9 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: Fonts.sans,
   },
+  soundButton: { alignSelf: 'flex-start', minHeight: 38, paddingHorizontal: 11, borderRadius: 19, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.05)', flexDirection: 'row', alignItems: 'center', gap: 7 },
+  soundText: { color: '#CFE7D4', fontFamily: Fonts.sans, fontSize: 12, fontWeight: '700' },
+  soundTextMuted: { color: '#78917D' },
   resumeCard: { minHeight: 68, marginTop: 10, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(124,253,77,0.5)', backgroundColor: 'rgba(124,253,77,0.12)', flexDirection: 'row', alignItems: 'center', gap: 12 },
   resumeIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#7CFD4D', alignItems: 'center', justifyContent: 'center' },
   resumeCopy: { flex: 1 },
@@ -133,13 +125,6 @@ const styles = StyleSheet.create({
   resumeTitle: { color: '#F3FFF6', fontSize: 16, fontWeight: '900', fontFamily: Fonts.sans, marginTop: 3 },
   profileButton: { minHeight: 52, marginTop: 8, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(124,253,77,0.25)', backgroundColor: 'rgba(124,253,77,0.07)', flexDirection: 'row', alignItems: 'center', gap: 10 },
   profileText: { color: '#E6F3E8', fontSize: 14, fontWeight: '700', fontFamily: Fonts.sans, flex: 1 },
-  soloButton: { minHeight: 68, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(124,253,77,0.35)', backgroundColor: 'rgba(124,253,77,0.09)', flexDirection: 'row', alignItems: 'center', gap: 12 },
-  soloIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#7CFD4D', alignItems: 'center', justifyContent: 'center' },
-  soloCopy: { flex: 1 },
-  soloTitle: { color: '#F3FFF6', fontSize: 16, fontWeight: '900', fontFamily: Fonts.sans },
-  soloSubtitle: { color: '#9CB7A1', fontSize: 12, fontFamily: Fonts.sans, marginTop: 2 },
-  dailyButton: { minHeight: 62, paddingHorizontal: 15, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(248,215,122,0.3)', backgroundColor: 'rgba(248,215,122,0.07)', flexDirection: 'row', alignItems: 'center', gap: 12 },
-  quickMatchButton: { minHeight: 62, paddingHorizontal: 15, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(112,200,255,0.3)', backgroundColor: 'rgba(112,200,255,0.07)', flexDirection: 'row', alignItems: 'center', gap: 12 },
   button: {
     marginTop: 10,
     height: 50,

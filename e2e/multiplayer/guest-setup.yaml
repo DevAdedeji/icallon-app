@@ -7,6 +7,12 @@ name: Multiplayer guest setup
 - waitForAnimationToEnd
 - runFlow:
     when:
+      visible: ${DEV_SERVER_LABEL}
+    commands:
+      - tapOn: ${DEV_SERVER_LABEL}
+- waitForAnimationToEnd
+- runFlow:
+    when:
       visible: "Open"
     commands:
       - tapOn: "Open"

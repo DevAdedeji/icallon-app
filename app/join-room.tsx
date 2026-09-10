@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -7,6 +7,7 @@ import { Fonts } from '@/constants/theme';
 import { joinRoomSession } from '@/features/rooms/room-service';
 import { inviteCodeFromParam } from '@/features/rooms/room-invite';
 import { roomCodeSchema } from '@/features/rooms/room-validation';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function JoinRoomScreen() {
   const insets = useSafeAreaInsets();

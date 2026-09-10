@@ -1,4 +1,4 @@
-import { computerAnswers, scoreSoloRound, soloLetters } from '@/features/solo/solo-engine';
+import { computerAnswers, scoreSoloRound, SOLO_MODE_RULES, soloLetters } from '@/features/solo/solo-engine';
 
 describe('solo game engine', () => {
   it('creates a repeatable three-letter game from a seed', () => {
@@ -6,11 +6,11 @@ describe('solo game engine', () => {
     expect(new Set(soloLetters('classic', 'same-seed')).size).toBe(3);
   });
 
-  it('scales the number of computer answers with difficulty', () => {
+  it('makes the computer answer every category in every mode', () => {
     const filled = (answers: ReturnType<typeof computerAnswers>) => Object.values(answers).filter(Boolean).length;
-    expect(filled(computerAnswers('food', 'A', 'easy', 'seed'))).toBe(2);
-    expect(filled(computerAnswers('food', 'A', 'medium', 'seed'))).toBe(3);
-    expect(filled(computerAnswers('food', 'A', 'hard', 'seed'))).toBe(4);
+    expect(filled(computerAnswers('food', 'A'))).toBe(4);
+    expect(SOLO_MODE_RULES.easy.secondsPerRound).toBeGreaterThan(SOLO_MODE_RULES.hard.secondsPerRound);
+    expect(SOLO_MODE_RULES.easy.roundCount).toBeLessThan(SOLO_MODE_RULES.hard.roundCount);
   });
 
   it('awards 10 for unique, 5 for matching, and zero for wrong-letter answers', () => {

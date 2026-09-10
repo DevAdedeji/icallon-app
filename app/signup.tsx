@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View, ActivityIndicator } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -11,6 +11,7 @@ import { inviteCodeFromParam } from '@/features/rooms/room-invite';
 import { signUpSchema, type SignUpFormInputs } from '@/schemas/auth';
 import { supabase } from '@/lib/supabase/client';
 import { getAuthRedirectUrl, signInWithGoogle } from '@/lib/supabase/oauth';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function SignupScreen() {
   const { returnTo, roomCode } = useLocalSearchParams<{ returnTo?: string; roomCode?: string | string[] }>();

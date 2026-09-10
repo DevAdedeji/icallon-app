@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 import {
   getMatchHistory,
   getPlayerStats,
@@ -114,14 +114,6 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <View style={styles.modeStats}>
-              <Text style={styles.modeStat}>{progression.soloGames} solo games</Text>
-              <Text style={styles.modeDot}>·</Text>
-              <Text style={styles.modeStat}>{progression.soloWins} solo wins</Text>
-              <Text style={styles.modeDot}>·</Text>
-              <Text style={styles.modeStat}>{progression.dailyChallenges} dailies</Text>
-            </View>
-
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Achievements</Text>
               <Text style={styles.sectionCount}>{achievementsFor(progression).filter((item) => item.unlocked).length}/{achievementsFor(progression).length}</Text>
@@ -216,9 +208,6 @@ const styles = StyleSheet.create({
   progressTrack: { height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden', marginTop: 9 },
   progressFill: { height: '100%', borderRadius: 4, backgroundColor: '#7CFD4D' },
   levelMeta: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 10, marginTop: 6 },
-  modeStats: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 7, marginTop: 12 },
-  modeStat: { color: '#9CB7A1', fontFamily: Fonts.sans, fontSize: 11 },
-  modeDot: { color: '#526B57', fontFamily: Fonts.mono },
   achievementList: { gap: 9 },
   achievementCard: { minHeight: 70, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', backgroundColor: 'rgba(255,255,255,0.04)', padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
   achievementUnlocked: { borderColor: 'rgba(248,215,122,0.35)', backgroundColor: 'rgba(248,215,122,0.07)' },

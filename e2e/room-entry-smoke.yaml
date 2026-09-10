@@ -10,15 +10,7 @@ name: Protected room entry smoke test
     commands:
       - tapOn: "Open"
 - assertVisible: "MULTIPLAYER WORD BATTLE"
-- tapOn: "Create Room"
-- assertVisible: "Sign in to your account to play"
-- openLink: "icallon://welcome"
-- runFlow:
-    when:
-      visible: "Open"
-    commands:
-      - tapOn: "Open"
-- assertVisible: "MULTIPLAYER WORD BATTLE"
+- assertNotVisible: "Create Room"
 - tapOn: "Join Room"
 - assertVisible: "Sign in to your account to play"
 - openLink: "icallon://invite?code=ABC234"

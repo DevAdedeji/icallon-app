@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { Fonts } from '@/constants/theme';
 import type { Player } from '@/lib/game';
 import { supabase } from '@/lib/supabase/client';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
+import { useGameFeedback } from '@/features/feedback/game-feedback';
 
 const CONFETTI_COLORS = ['#7CFD4D', '#FFD166', '#FF6B6B', '#5CC8FF', '#C77DFF'];
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -26,6 +28,7 @@ type LeaderboardProps = {
 };
 
 export function Leaderboard({ isHost, isRematching, onRematch, roomId, onExit }: LeaderboardProps) {
+  const { playSound } = useGameFeedback();
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,12 +43,13 @@ export function Leaderboard({ isHost, isRematching, onRematch, roomId, onExit }:
         if (!active) return;
         setPlayers((data ?? []) as Player[]);
         setLoading(false);
+        if ((data ?? []).length > 0) playSound('success');
       });
 
     return () => {
       active = false;
     };
-  }, [roomId]);
+  }, [playSound, roomId]);
 
   const winner = players[0];
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -7,6 +7,7 @@ import { Fonts } from '@/constants/theme';
 import { createRoomSession } from '@/features/rooms/room-service';
 import { ROUND_OPTIONS, TIMER_OPTIONS } from '@/features/rooms/room-validation';
 import { CATEGORY_PACKS, DEFAULT_CATEGORY_LABELS, type CategoryPackId } from '@/features/game/category-packs';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
 export default function CreateRoomScreen() {
   const insets = useSafeAreaInsets();
@@ -42,10 +43,12 @@ export default function CreateRoomScreen() {
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={() => router.back()} style={[styles.backButton, { top: insets.top + 12 }]}>
-        <AntDesign name="arrow-left" size={20} color="#9CB7A1" />
-        <Text style={styles.backText}>Back</Text>
-      </Pressable>
+      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+        <Pressable testID="create-room-back" accessibilityRole="button" accessibilityLabel="Back to home" onPress={() => router.back()} style={styles.backButton}>
+          <AntDesign name="arrow-left" size={20} color="#CFE7D4" />
+          <Text style={styles.backText}>Back</Text>
+        </Pressable>
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scroll}>
         <View style={styles.content}>
           <View style={styles.header}>
@@ -151,11 +154,12 @@ export default function CreateRoomScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A120A' },
+  topBar: { minHeight: 64, paddingHorizontal: 24, justifyContent: 'flex-end' },
   scroll: { width: '100%' },
   scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
   content: { width: '100%', maxWidth: 400, paddingHorizontal: 24, paddingVertical: 32 },
-  backButton: { position: 'absolute', left: 24, zIndex: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  backText: { color: '#9CB7A1', fontSize: 14, fontFamily: Fonts.sans },
+  backButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  backText: { color: '#CFE7D4', fontSize: 14, fontFamily: Fonts.sans, fontWeight: '700' },
   header: { marginBottom: 28 },
   kicker: { color: '#9CB7A1', letterSpacing: 2.2, fontSize: 12, fontFamily: Fonts.mono, marginBottom: 8 },
   title: { color: '#F3FFF6', fontSize: 34, fontWeight: '900', fontFamily: Fonts.rounded, marginBottom: 6 },

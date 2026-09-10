@@ -1,14 +1,21 @@
 import AntDesign from '@expo/vector-icons/AntDesign';
-import { router, useFocusEffect } from 'expo-router';
+import { Redirect, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
 import { categoryPackName } from '@/features/game/category-packs';
+import { ENABLE_PAUSED_GAME_MODES } from '@/features/game/game-modes';
 import { getDailyChallenge, type DailyChallenge } from '@/features/solo/solo-service';
+import { InteractivePressable as Pressable } from '@/components/interactive-pressable';
 
-export default function DailyScreen() {
+export default function DailyRoute() {
+  if (!ENABLE_PAUSED_GAME_MODES) return <Redirect href="/game-lobby" />;
+  return <DailyScreen />;
+}
+
+function DailyScreen() {
   const insets = useSafeAreaInsets();
   const [challenge, setChallenge] = useState<DailyChallenge | null>(null);
   const [loading, setLoading] = useState(true);

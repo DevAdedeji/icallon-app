@@ -21,12 +21,6 @@ name: Host completes final round
     id: "confirm-round-button"
 - extendedWaitUntil:
     visible:
-      id: "show-final-results"
-    timeout: 30000
-- tapOn:
-    id: "show-final-results"
-- extendedWaitUntil:
-    visible:
       id: "leaderboard"
     timeout: 30000
 - assertVisible:
