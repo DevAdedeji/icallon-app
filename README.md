@@ -1,112 +1,147 @@
-# ICallOn mobile
+# ICallOn Mobile
 
-The Expo mobile client for ICallOn. It can create and join the same Supabase-backed rooms as the web game, with real-time lobby updates, timed rounds, answer autosave, host review, and final scores.
+ICallOn is a real-time multiplayer word game for iOS and Android. A host creates a room, chooses the game settings and starting letter, and players race against the clock to submit answers across several categories. The host reviews the round, scores are updated live, and the game ends with a final leaderboard.
 
-## One-time Supabase setup
+> **Project status:** Development is paused. This repository is public as a portfolio and reference project; there is no supported public release or hosted demo.
 
-Run these idempotent scripts in the Supabase SQL editor, in order:
+The original web application is available in the [ICallOn repository](https://github.com/DevAdedeji/ICallOn).
 
-1. [`supabase_game_policies.sql`](./supabase_game_policies.sql) replaces the old public-write policies with player ownership and host-only scoring controls.
-2. [`supabase_mobile_setup.sql`](./supabase_mobile_setup.sql) prevents duplicate players/answers during reconnects and retries.
+## Gameplay
 
-Re-run both scripts after pulling database-policy changes. The publishable key is only safe when row-level security is enabled and these policies are active.
+- Email/password and Google authentication
+- Private multiplayer rooms with shareable room codes
+- Authenticated room creation and guest joining
+- Configurable rounds, timers, category packs, and custom categories
+- Real-time lobby, round, review, and leaderboard updates
+- Automatic answer preservation when the host ends a round
+- Host-led answer validation with optimistic scoring feedback
+- Duplicate-aware scoring and live review progress
+- Rematches, player profiles, match history, and progression
+- Sound, haptic, animation, and confetti feedback
+- Session recovery after an app restart or temporary disconnect
 
-The setup script also installs the authenticated database functions used for room creation, joining, gameplay transitions, answer submission, scoring, and ending a game. These operations validate the caller and run atomically in PostgreSQL; the mobile client does not decide host authority or calculate trusted scores.
+Solo play, daily challenges, and public matchmaking are intentionally paused while the multiplayer experience remains the product focus.
 
-Copy `.env.example` to `.env`, then add your public Supabase values:
+## Tech stack
+
+- [React Native](https://reactnative.dev/) and [Expo SDK 57](https://docs.expo.dev/)
+- [Expo Router](https://docs.expo.dev/router/introduction/) for file-based navigation
+- TypeScript
+- [Supabase](https://supabase.com/) Auth, PostgreSQL, Realtime, and Row Level Security
+- Jest and React Native Testing Library
+- Maestro for simulator-based end-to-end tests
+
+## Project structure
+
+```text
+app/                  Expo Router screens
+components/           Shared interface components
+features/             Auth, rooms, game, profile, and feedback domains
+lib/                  Shared game and Supabase clients
+schemas/              Input validation schemas
+database/tests/       PostgreSQL integration tests
+e2e/                  Maestro smoke and multiplayer flows
+assets/                Images and game audio
+```
+
+## Local setup
+
+### Prerequisites
+
+- Node.js and npm
+- Expo Go or an iOS/Android simulator
+- A Supabase project
+- PostgreSQL 17+ for the optional database integration suite
+- Maestro for the optional simulator end-to-end suites
+
+Install the dependencies:
+
+```bash
+npm install
+```
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Add your own Supabase project values:
 
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your-key
 ```
 
-The publishable key is intentionally included in the client application. Never add a
-Supabase secret key, service-role key, or database connection URL to this repository.
-Row Level Security is the authorization boundary for mobile requests.
+The publishable key is intentionally available to the mobile client. Authorization depends on correctly configured Row Level Security. Never place a Supabase secret key, service-role key, database URL, signing key, or other private credential in this repository.
 
-Also add `icallon://auth/callback` as a redirect URL in Supabase Auth when using Google sign-in in a development or production build.
+### Configure Supabase
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Run the following idempotent scripts in the Supabase SQL editor, in order:
 
-## Run on iOS
+1. [`supabase_game_policies.sql`](./supabase_game_policies.sql) installs player-ownership and host-authority policies.
+2. [`supabase_mobile_setup.sql`](./supabase_mobile_setup.sql) installs constraints and authenticated database functions for room creation, joining, game transitions, answer submission, scoring, and game completion.
 
-1. Install dependencies
+The database functions validate the caller and execute multiplayer transitions atomically. The client does not decide host authority or calculate trusted scores.
 
-   ```bash
-   npm install
-   ```
+For Google sign-in, add `icallon://auth/callback` to the allowed redirect URLs in Supabase Auth. OAuth requires a development or production build because it depends on the app scheme.
 
-2. Start the app
+The checked-in Expo owner, project ID, update URL, and native application identifiers belong to the original project. Forks should replace them with their own Expo project and unique bundle/package identifiers before creating builds or publishing updates.
 
-   ```bash
-    npm run ios
-   ```
+## Run the app
 
-For an Expo Go session, run `npm start` and scan the QR code. Google sign-in needs a development build (`npm run ios`) because it uses the app's `icallon://` callback.
+Start an Expo Go session:
 
-The application routes are:
+```bash
+npm start
+```
 
-- Welcome, email/password sign-up and login, Google sign-in
-- Authenticated home screen; create or join a room
-- Live lobby and invite sharing
-- Host letter selection, timed answers, autosave and submission
-- Host answer review/validation, scoring, next round and leaderboard
+Run a native development build:
+
+```bash
+npm run ios
+npm run android
+```
+
+Both devices must connect to the same Supabase project to participate in the same room.
 
 ## Verification
 
-Run the local checks before pushing a mobile change:
+Run linting, TypeScript checks, and unit tests:
 
 ```bash
 npm run verify
-npm run test:database
-npx expo-doctor
 ```
 
-`npm run test:database` starts a disposable local PostgreSQL 17+ instance, applies the policy and mobile setup scripts, exercises a two-player game, verifies authorization and scoring invariants, reapplies the migration to prove it is idempotent, and then removes the temporary database.
+Run the disposable PostgreSQL policy and multiplayer integration suite:
 
-With an iOS Simulator booted and the development build installed, run the simulator smoke suite with:
+```bash
+npm run test:database
+```
+
+Run the iOS simulator smoke tests after installing and booting a development build:
 
 ```bash
 npm run e2e:ios
 ```
 
-The complete multiplayer suite uses two booted simulators and dedicated test accounts:
+Run the complete two-simulator multiplayer flow:
 
 ```bash
 npm run e2e:ios:multiplayer
 ```
 
-On its first run, the script generates dedicated credentials in the ignored `.e2e/credentials` file and provisions two test-only Supabase users. You can override them with `E2E_HOST_EMAIL`, `E2E_HOST_USERNAME`, `E2E_GUEST_EMAIL`, `E2E_GUEST_USERNAME`, and `E2E_TEST_PASSWORD`. The suite creates a three-round room on the host simulator, joins from the guest simulator, submits and scores every round, and verifies the 120-point final leaderboard on both devices.
+The multiplayer runner stores generated test credentials in the ignored `.e2e/credentials` file. They can be overridden with `E2E_HOST_EMAIL`, `E2E_HOST_USERNAME`, `E2E_GUEST_EMAIL`, `E2E_GUEST_USERNAME`, and `E2E_TEST_PASSWORD`.
 
-Expo can open the app in a
+## Security notes
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- `.env`, native signing material, generated test credentials, and build artifacts are ignored.
+- Only Supabase publishable credentials belong in the client environment.
+- Row Level Security and database functions are the authorization boundary.
+- Use a separate Supabase project for local experimentation and never reuse production credentials in a fork.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+If a real secret is ever committed, revoke or rotate it immediately. Removing it from the latest commit is not sufficient because Git history and existing clones may retain it.
 
-## Get a fresh project
+## License
 
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+No open-source license is currently granted. The source is publicly viewable, but all rights remain with the copyright holder unless a license is added later.
