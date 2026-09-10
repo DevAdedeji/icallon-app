@@ -42,11 +42,11 @@ export default function WelcomeScreen() {
 
   }, [fade, glow, rise]);
 
-  const openProtectedRoute = (path: '/create-room' | '/join-room') => {
+  const openJoinRoom = () => {
     if (session) {
-      router.push(path);
+      router.push('/join-room');
     } else {
-      router.push({ pathname: '/login', params: { returnTo: path } });
+      router.push({ pathname: '/login', params: { returnTo: '/join-room' } });
     }
   };
 
@@ -78,16 +78,9 @@ export default function WelcomeScreen() {
         <View style={styles.buttonRow}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => openProtectedRoute('/create-room')}
+            onPress={openJoinRoom}
             style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryPressed]}>
-            <Text style={styles.primaryText}>Create Room</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => openProtectedRoute('/join-room')}
-            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryPressed]}>
-            <Text style={styles.secondaryText}>Join Room</Text>
+            <Text style={styles.primaryText}>Join Room</Text>
           </Pressable>
 
           <Pressable

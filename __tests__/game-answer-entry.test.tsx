@@ -47,4 +47,11 @@ describe('answer entry action feedback', () => {
     expect(screen.getByTestId('submit-answers-spinner')).toBeTruthy();
     expect(screen.queryByTestId('close-submissions-spinner')).toBeNull();
   });
+
+  it('describes the pre-review waiting state accurately', async () => {
+    const screen = await render(<AnswerEntry {...commonProps} submitting={false} closing={false} submitted />);
+
+    expect(screen.getByText('Answers submitted. Waiting for the round to end.')).toBeTruthy();
+    expect(screen.queryByText(/waiting for the host to review/i)).toBeNull();
+  });
 });
