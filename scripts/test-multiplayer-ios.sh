@@ -94,6 +94,7 @@ if [[ -z "${host_device}" || -z "${guest_device}" || "${host_device}" == "${gues
 fi
 
 dev_client_url="${E2E_DEV_CLIENT_URL:-exp+icallon://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A19000}"
+dev_server_label="${E2E_DEV_SERVER_LABEL:-http://localhost:19000}"
 artifact_root="${E2E_ARTIFACT_DIR:-artifacts/multiplayer-ios}"
 if [[ "${artifact_root}" != /* ]]; then
   artifact_root="$(pwd)/${artifact_root}"
@@ -121,7 +122,8 @@ common_guest=(
 )
 
 run_flow "${host_device}" e2e/multiplayer/host-setup.yaml \
-  -e "DEV_CLIENT_URL=${dev_client_url}" "${common_host[@]}"
+  -e "DEV_CLIENT_URL=${dev_client_url}" -e "DEV_SERVER_LABEL=${dev_server_label}" \
+  "${common_host[@]}"
 
 host_auth_response="$(curl -fsS --retry 4 --retry-all-errors --connect-timeout 10 \
   "${project_url}/auth/v1/token?grant_type=password" \
@@ -151,7 +153,8 @@ if [[ ! "${room_code}" =~ ^[A-HJ-NP-Z2-9]{6}$ ]]; then
 fi
 
 run_flow "${guest_device}" e2e/multiplayer/guest-setup.yaml \
-  -e "DEV_CLIENT_URL=${dev_client_url}" -e "ROOM_CODE=${room_code}" \
+  -e "DEV_CLIENT_URL=${dev_client_url}" -e "DEV_SERVER_LABEL=${dev_server_label}" \
+  -e "ROOM_CODE=${room_code}" \
   -e "HOST_USERNAME=${E2E_HOST_USERNAME}" "${common_guest[@]}"
 
 letters=(A B C)
